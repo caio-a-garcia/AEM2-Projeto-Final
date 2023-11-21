@@ -48,52 +48,42 @@ ncol(df)
 
 Existem 5 colunas nesta base de dados:
 
-1. *Store ID*: (Index) ID de cada loja.
-2. *Store_Area*: Área física da loja em jardas quadradas.
-3. *Items_Available*: Numero de produtos distintos a venda na loja.
-4. *DailyCustomerCount*: Numero médio de consumidores por mês.
-5. *Store_Sales*: Faturamento em (US $).
+1.  *Store ID*: (Index) ID de cada loja.
+2.  *Store_Area*: Área física da loja em jardas quadradas.
+3.  *Items_Available*: Numero de produtos distintos a venda na loja.
+4.  *DailyCustomerCount*: Numero médio de consumidores por mês.
+5.  *Store_Sales*: Faturamento em (US \$).
 
-- Valores Nulos
+-   Valores Nulos
+
 ```{r Valores NA}
 # Obtendo o número de valores núlos em cada coluna
 colSums(is.na(df))
 ```
+
 Não existem valores nulos nesta base de dados.
 
-- Classe de cada coluna
+-   Classe de cada coluna
+
 ```{r Classe}
 # Obtendo o tipo de cada coluna
 sapply(df, class)
 ```
+
 Todas as colunas são númericas e valores inteiros. Porém a primeira coluna chamada Store.ID representa o index de cada loja,
 
-- Abordagem não supervisionada
+-   Abordagem não supervisionada
 
 A estratégia não supervisionada selecionada foi algoritmo K-means. Este método será empregado com o intuito de determinar o número ideal de clusters e, simultaneamente, agrupar as lojas com base em características específicas fornecidas. Essas características incluem o tamanho da loja em jardas quadradas, o número de produtos distintos disponíveis para venda e a média mensal de consumidores.
 
-- Abordagem supervisionada
+-   Abordagem supervisionada
 
 Na modelagem supervisionada, adotaremos as duas abordagens previamente discutidas, aplicando os algoritmos tanto à base de dados completa quanto às bases de dados segmentadas pela clusterização. Para a definição do modelo de regressão, compararemos métodos como a regressão linear simples, a regressão com penalização Lasso e Ridge, além de métodos baseados em árvores de decisão, como Random Forest e Gradient Boosting. Durante o processo de modelagem, os hiperparâmetros serão otimizados com o objetivo de alcançar a melhor precisão possível nas previsões.
 
 Algoritimos selecionados:
 
-1. Regressão Linear Simples
-2. Regresssão Linear Lasso
-3. Regressão Linear Ridge
-4. Floresta Aleatória
-5. Gradient Boosting
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+1.  Regressão Linear Simples
+2.  Regresssão Linear Lasso
+3.  Regressão Linear Ridge
+4.  Floresta Aleatória
+5.  Gradient Boosting
