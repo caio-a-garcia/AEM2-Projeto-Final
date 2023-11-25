@@ -1,0 +1,319 @@
+---
+title: "Pré-Processamento"
+author: "Murilo, Caio e Isabella"
+date: "2023-11-24"
+output: html_document
+---
+
+# Pré-Processamento
+
+O objetivo deste documento em formato Rmarkdown é conduzir o pré-processamento da base de dados contida no arquivo kc_house_data.csv. Ao concluir este processo, uma nova versão da base de dados, agora "limpa", será armazenada em formato CSV. Essa versão tratada será posteriormente utilizada na fase de análise exploratória dos dados.
+
+Faz parte desta etapa:
+
+- Conversão de formato
+- Tratamento de Dados Ausentes
+- Tratamento de Outliers 
+
+## Bibliotecas
+
+Aqui estão todas as bibliotecas utilizadas neste código.
+
+```{r Bibliotecas}
+library(tidyverse)
+library(gridExtra)
+library(leaflet)
+library(leaflet.extras)
+```
+
+## Base de dados
+
+Imortando a base de dados para o ambiente do R.
+
+```{r Importando arquivo csv}
+# Lendo o arquivo csv
+df <- read.csv("data/kc_house_data.csv")
+
+# Visualizando as primeiras linhas
+head(df, 10)
+```
+```{r Número de linhas}
+nrow(df)
+```
+
+
+## Valores Nulos
+
+O Primeiro tratamento a ser realizado é verificar a quantidade de valores nulos por coluna.
+
+```{r Tabela de Valores nulos}
+colSums(is.na(df))
+```
+Não existe nenhuma coluna com valores nulos.
+
+## Ajustando formato
+
+Nesta parte iremos ajustar o formato das colunas.
+
+```{r Verificando formato}
+str(df)
+```
+A unica coluna que necessita de tratamento é a coluna date, que será transformada para formato de data.
+
+```{r Formato datetime}
+# Transformando coluna date em datetime
+df$date <- as.POSIXct(df$date, format="%Y%m%dT%H%M%S")
+
+# Visualizando mudança
+class(df$date)
+```
+O POSIXct é uma classe de objeto em R que representa datas e horas com uma resolução de até segundos. Este formato é comumente utilizado para manipulação eficiente de dados temporais.
+
+
+## Linhas Duplicadas
+
+Verificando se existem linhas duplicadas no dataframe. 
+
+```{r Linhas Duplicadas}
+any(duplicated(df))
+```
+
+Não existem linhas duplicadas no dataframe.
+
+Outra verificação é se a coluna id possui valores duplicados.
+
+
+```{r Valores duplicados coluna id}
+any(duplicated(df$id))
+```
+Existem imóveis duplicados no dataframe. 
+
+```{r Verificando os imóveis duplicados}
+# Salvando IDs duplicados em um vetor
+id_duplicados <- unique(df$id[duplicated(df$id)])
+
+# Criando dataframe com as linhas de IDs duplicados
+df_id_duplicados <- df[df$id %in% id_duplicados, ]
+
+head(df_id_duplicados, 15)
+```
+
+Ao analisarmos o resultado das observações com id duplicadas, percebemos que alguns imóveis estão duplicados devido a atualizações nos preços ao longo do tempo. Nestes casos, os imóveis provavelmente foram negociados mais de uma vez durante o período de um ano abrangido pelas informações da base. Como propósito final deste trabalho é realizar a predição dos valores dos imóveis, decidimos manter apenas o preço mais recente, descartando informações de preços antigos associados aos mesmos imóveis.
+
+```{r Removendo observações desatualizadas}
+# Removendo observações duplicadas desatualizadas
+df <- df %>%
+  group_by(id) %>%
+  arrange(desc(date)) %>%
+  slice(1)
+
+# Visualizando resultado
+any(duplicated(df$id))
+```
+
+## Colunas de Datas
+
+A primeira coluna de data que será modificada é a yr_build, que representa o ano em que a casa foi construída. Para realizar essa alteração, faremos a operação na coluna date, subtraindo a coluna yr_build. Isso nos proporcionará a idade do imóvel. Essa modificação oferece uma abordagem mais intuitiva e interpretável ao comparar com o ano de construção.
+
+```{r Coluna Idade do Imóvel}
+# Criando coluna com o ano
+df$date_year <- format(df$date, "%Y")
+
+# Formatando coluna para int
+df$date_year <- as.integer(df$date_year)
+
+# Cálculando a idade do imóvel
+df$age <- df$date_year - df$yr_built
+
+# Removendo colunas date_year e yr_built
+df$date_year <- NULL
+df$yr_built <- NULL
+
+# Visualizando o resultado 
+head(df, 10)
+```
+
+Observando a quantidade de linhas não zeradas da coluna yr_renovated
+
+```{r Linhas não zeradas}
+# Cálculando porcentagem de linhas com valores diferentes de zero
+(nrow(df[df$yr_renovated != 0, ])/nrow(df))*100
+```
+Considerando que apenas cerca de 4% das observações apresentam valores não nulos na coluna yr_renovated, decidimos transformar essa coluna em uma variável binária. Essa variável indicará se o imóvel foi (1) ou não (0) renovado. Essa abordagem simplifica a informação, tornando-a mais relevante para análises e modelagem subsequentes. Além disso, contribui para a eficácia e interpretabilidade do conjunto de dados, facilitando sua interpretação.
+
+```{r Modifianco coluna yr_renovated}
+# Criando coluna binaria
+df$renovated <- ifelse(df$yr_renovated == 0, 0, 1)
+
+# Retirando coluna yr_renovated do dataframe
+df$yr_renovated <- NULL
+
+# Visualizando os resultados
+head(df, 10)
+```
+
+## Variaveis do tamanho do apartamento
+
+Dentre as variaveis preditoras temos 5 que representam o tamanho do apartamento, são elas:
+
+- sqft_living: Metragem quadrada da área habitável da casa;
+- sqft_lot: Metragem quadrada do terreno;
+- sqft_above:Metragem quadrada da casa excluindo o porão;
+- sqft_basement: Metragem quadrada do porão.
+- sqft_living15: Área hábitavel em 2015 (implica algumas reformas). Isso pode ou não ter afetado a metragem do terreno;
+- sqft_lot15: Área do terreno em 2015 (implica algumas reformas). Isso pode ou não ter afetado a metragem do terreno;
+
+Primeiramente iremos analisar a relação entre as variaveis sqft_living, sqft_above e sqft_basement que aparentemente possuem uma alta correlação entre si. Iremos verificar se a soma de sqft_above e sqft_basement é igual a sqft_living.
+```{r Testando sqft_above + sqft_basement = sqft_living}
+# Criando coluna de comparação
+df$soma_sqft <- df$sqft_above + df$sqft_basement
+
+# Verificando se há diferenças
+dif_sqft <- sum(df$soma_sqft != df$sqft_living)
+
+# Criando teste lógico
+if (dif_sqft == 0) {
+  print("A soma de sqft_above e sqft_basement é igual a sqft_living para todas as observações.")
+} else {
+  print("Existem diferenças na soma de sqft_above e sqft_basement em relação a sqft_living.")
+}
+
+# Retirando coluna do dataframe
+df$soma_sqft <- NULL
+```
+Como comprovado anteriormente, a coluna sqft_living é a soma das variáveis sqft_above e sqft_basement. Em outras palavras, essas variáveis são redundantes e possuem uma relação linear perfeita entre elas. Diante desse entendimento, optaremos por desconsiderar uma das colunas e trabalhar com a porcentagem da área quadrada que o porão representa em relação à metragem habitável total da casa. Essa abordagem simplifica a representação da informação, evitando multicolinearidade e fornecendo uma métrica mais específica para análises futuras.
+
+```{r Criando nova métrica}
+# Obtendo porcentagem de área com porão
+df$basement_percent <- df$sqft_basement/df$sqft_living
+
+# Retirando as colunas sqft_basement e sqft_above do dataframe
+df$sqft_above <- NULL
+df$sqft_basement <- NULL
+
+# Visualizando o resultado
+head(df, 10)
+```
+Observando a distribuição desta nova variavel criada.
+
+```{r Histograma basement_percent}
+ggplot(df, aes(x = basement_percent*100)) +
+  geom_histogram(binwidth = 5, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Distribuição do Percentual de porão",
+       x = "Percentual de porão em relação a área habitavel",
+       y = "Frequência") +
+  theme_minimal()
+
+```
+Como podemos observar, temos muitas casas que não possuem porão.
+
+```{r Histograma basement_percent sem valores zerados}
+ggplot(df[df$basement_percent > 0, ], aes(x = basement_percent * 100)) +
+  geom_histogram(binwidth = 5, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Distribuição do Percentual de porão",
+       x = "Percentual de porão em relação a área habitável",
+       y = "Frequência") +
+  theme_minimal()
+```
+Aparentemente existe um padrão de tamanho percentual de porões nos imóveis desta cidade.
+
+As colunas sqft_living15 e sqft_lot15 representam possíveis alterações nas dimensões consideradas para a área habitável e o tamanho do lote, respectivamente. Entretanto, visto que essas alterações não parecem ser uma medida confiável, uma vez que afetam algumas casas e outras não, decidimos remover essas colunas do dataframe.
+
+```{r Removendo colunas do dataframe}
+df$sqft_living15 <- NULL
+df$sqft_lot15 <- NULL
+```
+
+Considerando que a principal métrica no mercado imobiliário para determinar o tamanho dos imóveis é a área construída, escolheremos abordar a coluna sqft_lot, que indica o tamanho total do lote, de maneira proporcional através da razão entre ela e a coluna sqft_living. Dessa forma, obteremos uma medida proporcional do tamanho da área construída em relação ao tamanho total do lote.
+
+```{r Cálculando nova métrica}
+# Criando nova métrica
+df$lot_percent <- df$sqft_living / df$sqft_lot
+
+# Retirando coluna do dataframe
+df$sqft_lot <- NULL
+
+# Visualizando dataframe
+head(df, 10)
+```
+Visualizando a distribuição desta nova variavel:
+
+```{r Histograma lot_percent}
+ggplot(df, aes(x = lot_percent*100)) +
+  geom_histogram(binwidth = 5, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Distribuição do tamanho do lote em relação a área habitavel",
+       x = "Indice de proporção do tamanho do lote em relação a área habitavel",
+       y = "Frequência") +
+  theme_minimal()
+```
+## Preditoras de Localização
+
+Neste dataframe, encontramos três colunas que denotam a localização do apartamento na cidade: zipcode, latitude e longitude. Com o intuito de privilegiar a interpretabilidade do modelo, buscaremos consolidar essas informações de localização em uma única variável. Essa nova variável representará a classe de localização na qual o imóvel se enquadra. Dado que temos informações sobre apartamentos de diversos intervalos de preço e tamanhos, optaremos por utilizar a métrica de preço por feet quadrado para agrupar essas unidades com base na localização. Essa abordagem proporcionará uma representação mais simplificada e compreensível da informação de localização, contribuindo para a eficácia e interpretabilidade do modelo.
+
+```{r Criando coluba price/sqft}
+# Criando métrica
+df$price_sqft <- df$price / df$sqft_living
+
+# Observando a normalização com relação ao preço
+grafico1 <- ggplot(df, aes(x = sqft_living, y = price)) +
+  geom_point() +
+  labs(title = "Tamamho do impóvel x preço",
+       x = "Tamanho do impovel",
+       y = "Preço") +
+  theme_minimal()
+
+grafico2<- ggplot(df, aes(x = sqft_living, y = price_sqft)) +
+  geom_point() +
+  labs(title = "Tamamho do impóvel x preço por feet quadrado",
+       x = "Tamanho do impovel",
+       y = "Preço por feet quadrado") +
+  theme_minimal()
+
+# Plotando
+grid.arrange(grafico1, grafico2, ncol = 2)
+```
+Primeiramente iremos observar os pontos no mapa:
+```{r}
+# Crie o mapa de calor usando leaflet
+mapa <- leaflet(df) %>%
+  addTiles() %>%
+  addCircleMarkers(
+    ~long, ~lat,
+    color = ~as.numeric(price_sqft),
+    radius = 5,
+    fillOpacity = 0.7
+  ) %>%
+  addLegend(
+    position = "bottomright",
+    pal = colorNumeric(palette = "viridis", domain = df$price_sqft),
+    values = ~as.numeric(price_sqft),
+    title = "Preço por m²"
+  )
+
+mapa
+```
+
+
+
+
+
+
+## Ajustes finais
+Retirando as colunas id e date.
+
+```{r}
+df$date <- NULL
+df$id <- NULL
+```
+
+Salvando arquivo final
+
+```{r}
+write.csv(df, "data/df_pre_processamento.csv", row.names = FALSE)
+```
+
+
+
+
+
+
