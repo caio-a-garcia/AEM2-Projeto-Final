@@ -1,0 +1,709 @@
+---
+title: "Modelagem"
+author: "Murilo, Caio e Isabella"
+date: "2023-11-28"
+output: html_document
+---
+
+# Modelagem
+
+O objetivo deste rmarkdown é realizar a modelagem estatística para a base de dados tratada na etapa de pré-processamento. Para isso, compararemos o desempenho de quatro modelos de regressão com o objetivo de predizer o preço dos imóveis a partir das variáveis preditoras geradas nessa etapa. Os modelos que serão utilizados nesta comparação são:
+
+-   Regressão Linear Multivariada
+-   Regressão Linear Ridge
+-   Floresta Aleatória
+-   Gradient Boosting
+
+## Bibliotecas
+
+Carregando as bibliotecas utilizadas no projeto.
+
+```{r Bibliotecas}
+library(tidyverse)
+library(tidymodels)
+library(parsnip)   
+library(tune)
+library(doParallel)
+library(ggplot2)
+library(rsample)
+library(gridExtra)
+```
+
+## Carregando base de dados
+
+Importando a base de dados gerada na etapa de pré-processamento.
+
+```{r}
+df <- read.csv("data/df_pre_processamento.csv")
+
+
+head(df, 10)
+```
+
+## Métrica de Desempenho
+
+Para a comparação dos modelos, optaremos por utilizar a métrica de Erro Quadrático Médio (EQM). Contudo, dada a grande disparidade de escala na coluna target, representando imóveis com preços bastante distintos, reconhecemos a necessidade de aprimorar a interpretação do EQM. Para abordar esse desafio, calcularemos o EQM em termos percentuais, normalizando o erro pela magnitude dos valores observados. Esta abordagem, conhecida como Erro Percentual, será obtida ao dividir o erro pelo valor real, proporcionando uma visão mais significativa e intuitiva do desempenho dos modelos em cenários com variação expressiva nos preços. Portanto, o dataframe que armazenará os resultados de cada algoritmo incluirá tanto o EQM convencional quanto o EQM percentual, oferecendo uma análise abrangente e aprimorada do desempenho preditivo.
+
+$ MAPE = \frac{1}{n} \sum\_{i=1}\^{n} \left\| \frac{Y_i - \hat{Y}_i}{Y_i} \right\| \times 100 $
+
+```{r}
+df_results <- data.frame(
+    Modelo = c("Linear", "Ridge", "Floresta Aleatória", "Gradient Boosted"),
+    EQM = c(NA, NA, NA, NA),
+    MAPE = c(NA, NA, NA, NA)
+)
+
+print(df_results)
+```
+
+## Conjunto de teste e treinamento
+
+Separando os conjuntos de teste e treinamento. Os mesmos conjuntos serão utilizados para comparar o desempenho dos modelos.
+
+No dataframe em questão, há colunas categóricas, como 'waterfront', 'renovated' e 'grupo', que podem complicar a divisão dos conjuntos de teste e treinamento. Se essas colunas exibirem um desequilíbrio considerável, há o risco de certas categorias não serem adequadamente representadas nos conjuntos de teste ou treinamento, o que prejudicaria a eficácia da modelagem.
+
+```{r Frequencia Relativa Waterfront}
+# Calculando a frequencia relativa da coluna waterfront
+prop.table(table(df$waterfront))
+```
+
+```{r Frequencia Relativa Renovated}
+# Calculando a frequencia relativa da coluna waterfront
+prop.table(table(df$renovated))
+```
+
+```{r Frequencia Relativa Grupo}
+# Calculando a frequencia relativa da coluna waterfront
+prop.table(table(df$grupo))
+```
+
+Ao analisar as frequências relativas calculadas para as colunas 'renovated' e 'waterfront', percebemos que devido a uma categoria apresentar um percentual muito baixo, há o risco de ela ficar sub-representada durante a divisão entre conjuntos de teste e treinamento. Para mitigar esse problema, optaremos por realizar uma estratificação na amostra dos conjuntos de teste e treinamento, assegurando assim a manutenção dessas proporções específicas.
+
+```{r Split}
+# Criando variavel combinada para estratificação
+df$estrato_combinado <- paste(df$waterfront, df$renovated, sep = "_")
+
+# Definindo a semente aletória
+set.seed(39)
+
+# Realizando split
+split <- initial_split(df, prop=0.8, strata = "estrato_combinado")
+
+# Criando conjuntos de teste e treinemanto
+conj_treino <- training(split)
+conj_teste <- testing(split)
+
+# Removendo a coluna estrato_combinado 
+df$estrato_combinado <- NULL
+conj_treino$estrato_combinado <- NULL
+conj_teste$estrato_combinado <- NULL
+```
+
+Com os conjuntos criados, podemos verificar se a estratificação foi eficaz:
+
+Primeiramente para o conjunto de treinamento
+
+```{r}
+# Verificando estratificação do conjunto de treinamento Waterfront
+prop.table(table(conj_treino$waterfront))
+```
+
+```{r}
+# Verificando estratificação do conjunto de treinamento renovated
+prop.table(table(conj_treino$renovated))
+```
+
+Percebe-se que a estratificação foi eficaz para o conjunto de treinamento.
+
+Verificando para o conjunto de teste:
+
+```{r}
+# Verificando estratificação do conjunto de treinamento Waterfront
+prop.table(table(conj_teste$waterfront))
+```
+
+```{r}
+# Verificando estratificação do conjunto de treinamento renovated
+prop.table(table(conj_teste$renovated))
+```
+
+Assim como para o conjunto de treinamento, a estratificação foi satisfatória para o conjunto de teste.
+
+## Definindo receita
+
+Para realizar a modelagem de maneira eficaz, será utilizado a função recipe() da biblioteca tidymodels para normalizar as colunas númericas e criar as váriaveis dummy nas colunas categoricas.
+
+```{r Criando receita}
+# Receita
+receita <- recipe(price ~., data = conj_treino) %>%
+            step_normalize(all_numeric(), -all_outcomes()) %>% # Normalizando coluna númericas
+            step_dummy(all_nominal(), -all_outcomes()) # Criando variaveis dummy 
+```
+
+Com a receita definida, podemos realizar o processamento dos dados:
+
+```{r}
+# Preparando a receita
+receita_prep <- prep(receita)
+
+# Executando a receita para os conjuntos de teste e treinamento
+conj_treino_baked <- bake(receita_prep, new_data = NULL)
+conj_teste_baked <- bake(receita_prep, new_data = conj_teste)
+```
+
+Observando o processamento do conjunto de treinamento:
+
+```{r}
+head(conj_treino_baked, 10)
+```
+
+## Modelagem
+
+Com a receita criada, podemos prosseguir com as modelagens.
+
+### Validação cruzada
+
+Para otmizar alguns dos hiperparametros será utilizado a tecnica de validação cruzada.
+
+```{r Criando Folds}
+# Setando semente aleatória
+set.seed(39)
+
+# Criando folds
+cv_folds <- vfold_cv(conj_treino, v=10)
+```
+
+### Modelo Linear
+
+Primeiro modelo testado será o de regressão linear.
+
+```{r}
+# Especificando o modelo
+linear_model <- linear_reg() %>%
+  set_engine("lm")
+
+# Ajustando o modelo com o conjunto de treinamento
+linear_model_fit <- linear_model %>%
+  fit(price ~., data = conj_treino_baked)
+
+summary(linear_model_fit$fit)
+```
+
+Observando a coluna Pr(\>\|t\|), percebe-se que todas as variáveis preditoras apresentam a indicação de três asteriscos (\*\*\*), o que sugere que elas possuem o mais elevado nível de significância contra a hipótese nula de que o coeficiente é zero. Em outras palavras, para o modelo linear simples e sem penalização, todas as variáveis preditoras contribuem significativamente para a predição do preço do imóvel.
+
+Com o modelo treinado, podemos realizar as predições com base no conjunto de teste.
+
+```{r}
+# Realizando a predição
+linear_model_predctions <- linear_model_fit %>%
+  predict(new_data = conj_teste_baked) %>%
+  mutate(observado = conj_teste_baked$price, modelo = "Linear")
+
+# Visualizando as primeiras 10 linhas
+head(linear_model_predctions, 10)
+```
+
+Cálculando métricas de desempenho.
+
+```{r}
+# Cálculando erro quadrático médio
+eqm_linear <- (rmse(linear_model_predctions, observado, .pred)$.estimate)**2
+
+# Cálculando erro percentual absoluto médio(MAPE)
+mape_linear <- mean(abs((linear_model_predctions$observado - linear_model_predctions$.pred)/linear_model_predctions$observado)*100)
+
+# Adicionando resultados para o df de comparação
+df_results[df_results$Modelo == "Linear", "EQM"] <- eqm_linear
+df_results[df_results$Modelo == "Linear", "MAPE"] <- mape_linear
+
+df_results
+```
+
+Observando os resultados para o modelo linear, este algoritmo tem um erro médio de aproximadamente 22%. 
+
+### Ridge
+
+Realizando a modelagem de regrssão com penalização ridge.
+
+Primeiramente, iremos especificar o modelo.
+
+```{r}
+# Especificando o modelo
+ridge_model <- linear_reg(penalty = tune(), mixture = 0, mode = "regression") %>%
+  set_engine("glmnet")
+
+# Definindo os valores de lambda que serão testados
+lambda_values <- tibble(penalty = c(0.0001, 0.001, 0.01, 0.1, 1, 2, 5, 10, 15, 30, 1000, 10000, 100000))
+
+# Criando grid 
+grid_ridge_result <- tune_grid(
+  ridge_model,
+  receita,
+  resamples = cv_folds,
+  grid = lambda_values
+)
+
+# Visualize os resultados
+grid_ridge_result %>%
+  collect_metrics() %>%
+  filter(.metric == "rmse") %>%
+  arrange(mean) 
+```
+
+Ao analisar os resultados da otimização, notamos que o erro só apresenta mudanças significativas para valores de $\lambda$ extremamente altos. Em outras palavras, as variáveis requerem uma penalização substancial para terem seus coeficientes reduzidos a zero. Dado que a penalidade não impactou significativamente o desempenho do modelo, optaremos pelo menor valor de $\lambda$ obtido. Contudo, é importante salientar que, neste contexto, o uso do modelo Lasso não oferece vantagens em relação à regressão linear simples.
+
+```{r Modelo Final}
+ridge_model_final <- ridge_model %>%
+  finalize_model(tibble(penalty = 0.0001)) %>%
+  fit(price ~., data=conj_treino_baked)
+
+coef(ridge_model_final$fit, s = 0.0001)
+```
+
+Com o hiperparametro otimizado, podemos realizar as predições do conjunto de teste e cálcular as métrica de desempenho.
+
+```{r Predição do Conjunto de Teste}
+# Realizando a predição
+ridge_model_predctions <- ridge_model_final %>%
+  predict(new_data = conj_teste_baked) %>%
+  mutate(observado = conj_teste_baked$price, modelo = "Ridge")
+
+# Visualizando as primeiras 10 linhas
+head(ridge_model_predctions, 10)
+```
+Cálculando métricas de desempenho.
+
+```{r}
+# Cálculando erro quadrático médio
+eqm_ridge <- (rmse(ridge_model_predctions, observado, .pred)$.estimate)**2
+
+# Cálculando erro percentual absoluto médio(MAPE)
+mape_ridge <- mean(abs((ridge_model_predctions$observado - ridge_model_predctions$.pred)/ridge_model_predctions$observado)*100)
+
+# Adicionando resultados para o df de comparação
+df_results[df_results$Modelo == "Ridge", "EQM"] <- eqm_ridge
+df_results[df_results$Modelo == "Ridge", "MAPE"] <- mape_ridge
+
+df_results
+```
+Como já era esperado pelo resultado observado na validação cruzada, a penalização não ofereceu nenhuma vantagem significativa para o modelo.
+
+### Random Forest
+
+Modelagem utilizando o método de árvores aleatórias.
+
+```{r}
+# Especificando o modelo
+rf_model <- rand_forest(
+  trees = tune(),
+  mtry = tune(),
+  min_n = tune()
+) %>%
+  set_mode("regression") %>%
+  set_engine("ranger")
+```
+
+Definindo o grid de valores que serão testados. 
+
+```{r}
+rf_grid <- expand.grid(
+  trees = c(50, 100, 200, 500),              
+  mtry = c(2, 3, sqrt(ncol(training_data)-1)), # 2, 3 e raiz quadrada do nº de preditores
+  min_n = c(10, 15, 30)                        
+)
+```
+
+
+A estratégia para otimizar esses hiperparametros será a validação cruzada para 10 lotes, assim como foi realizado para o Ridge. Para está etapa utilizaremos um conceito de escalabilidade horizontal, paralelizando o código com o intuito aumentar a velocidade de processamento desta validação cruzada.
+
+```{r}
+# Paralelizando para obter um processamento mais rápido
+
+# Determinar o número de núcleos a serem utilizados
+num_cores <- detectCores() - 1 # deixando um núcleo livre
+
+# Registrar o backend paralelo
+registerDoParallel(cores = num_cores)
+
+# Realizando a otimização
+grid_rf_result <- tune_grid(
+  rf_model,
+  receita,
+  resamples = cv_folds,
+  grid = rf_grid
+)
+
+# Finalizando a paralelização após a conclusão da tarefa
+stopImplicitCluster()
+```
+
+```{r Visualizando os resultados do grid}
+# Visualize os resultados
+grid_rf_result %>%
+  collect_metrics() %>%
+  filter(.metric == "rmse") %>%
+  arrange(mean) 
+```
+
+Com as combinações cálculadas, retreinamos o modelo com esses hiperparametros.
+
+```{r}
+# Melhor combinação 
+rf_best_hip <- select_best(grid_rf_result, "rmse")
+
+rf_best_hip
+```
+
+```{r Modelo Final}
+rf_model_final <- rf_model %>%
+  finalize_model(rf_best_hip) %>%
+  fit(price ~., data = conj_treino_baked)
+```
+
+Assim, será cálculado as predições para o conjunto de teste e a métrica de desempenho do modelo.
+```{r}
+# Realizando a predição
+rf_model_predctions <- rf_model_final %>%
+  predict(new_data = conj_teste_baked) %>%
+  mutate(observado = conj_teste_baked$price, modelo = "Floresta Aleatória")
+
+# Visualizando as primeiras 10 linhas
+head(rf_model_predctions, 10)
+```
+Cálculando métricas de desempenho.
+
+```{r}
+# Cálculando erro quadrático médio
+eqm_rf <- (rmse(rf_model_predctions, observado, .pred)$.estimate)**2
+
+# Cálculando erro percentual absoluto médio(MAPE)
+mape_rf <- mean(abs((rf_model_predctions$observado - rf_model_predctions$.pred)/rf_model_predctions$observado)*100)
+
+# Adicionando resultados para o df de comparação
+df_results[df_results$Modelo == "Floresta Aleatória", "EQM"] <- eqm_rf
+df_results[df_results$Modelo == "Floresta Aleatória", "MAPE"] <- mape_rf
+
+df_results
+```
+
+Ao observar o resultado preditivo da floresta aleatória percebe-se uma melhora significativa.
+
+### Gradient Boosted Decision Trees
+
+O último modelo que será testado é o gradient boosting.
+
+```{r}
+# Especificando o modelo
+boosting_model <- boost_tree(
+  trees = tune(),
+  tree_depth = tune(),
+  learn_rate = tune(),
+  loss_reduction = tune(),
+  sample_size = tune()
+) %>%
+  set_mode("regression") %>%
+  set_engine("xgboost")
+```
+
+Criando grade de hiperparametros
+
+```{r}
+# Definindo a especificação dos parâmetros
+param_spec <- parameters(boosting_model)
+
+# Criar a grade aleatória
+set.seed(39) # para reprodutibilidade
+random_grid <- grid_random(param_spec, size = 50) # cria 50 combinações aleatórias
+```
+a grade de hiperparametros ajustada, podemos realizar a validação cruzada para encontrar a melhor combinação. Ressaltando que também utilizaremos a paralelização do código para obter um processamento mais rapido. 
+
+```{r}
+# Configurando a semente para reprodutibilidade
+#set.seed(39)
+
+# Configurando a paralelização
+#num_cores <- detectCores() - 1 # deixando um núcleo livre
+#registerDoParallel(cores = num_cores)
+
+# Medindo o tempo de execução e realizando a validação cruzada
+
+#grid_boosting_results <- tune_grid(
+  #boosting_model,
+  #receita,
+  #resamples = cv_folds,
+  #grid = random_grid)
+
+# Finalizando a paralelização
+#stopImplicitCluster()
+```
+
+
+```{r}
+# Melhor combinação 
+#boosting_best_hip <- select_best(grid_boosting_results, "rmse")
+
+# Salvando em um arquivo csv
+#write_csv(boosting_best_hip, "data/boosting_best_hip.csv")
+
+#boosting_best_hip
+```
+**OBS :Como o tempo de processamento é elevado para o modelo do XGboosting, os hiperparamentros otimizados serão salvos em um arquivo csv para não ser preciso rodar todas as interações novamente**
+
+```{r}
+# Lendo os hiperparametros otimizados
+boosting_best_hip <- read.csv("data/boosting_best_hip.csv")
+
+# Visualizando 
+boosting_best_hip
+```
+A partir dos hiperparametros otimizados, o modelo será retreinado.
+
+```{r}
+# Configurando semente aleatoria
+set.seed(39)
+
+boosting_model_final <- boosting_model %>%
+  finalize_model(boosting_best_hip) %>%
+  fit(price ~., data = conj_treino_baked)
+```
+
+Realizando as predições utilizando o conjunto de teste e calcular a métrica de desempenho.
+
+```{r Predições conjunto de teste}
+# Realizando a predição
+boosting_model_predctions <- boosting_model_final %>%
+  predict(new_data = conj_teste_baked) %>%
+  mutate(observado = conj_teste_baked$price, modelo = "Gradient_Boosting")
+
+# Visualizando as primeiras 10 linhas
+head(boosting_model_predctions, 10)
+```
+
+```{r}
+# Cálculando erro quadrático médio
+eqm_boosting <- (rmse(boosting_model_predctions, observado, .pred)$.estimate)**2
+
+# Cálculando erro percentual absoluto médio(MAPE)
+mape_boosting <- mean(abs((boosting_model_predctions$observado - boosting_model_predctions$.pred)/boosting_model_predctions$observado)*100)
+
+# Adicionando resultados para o df de comparação
+df_results[df_results$Modelo == "Gradient Boosted", "EQM"] <- eqm_boosting
+df_results[df_results$Modelo == "Gradient Boosted", "MAPE"] <- mape_boosting
+
+df_results
+```
+
+
+## Comparação de desempenhos entre modelos
+
+Com as métricas de desempenho cálculadas para os quatro modelos, chegamos na seguinte tabela de erro:
+
+```{r}
+df_results
+```
+
+Para entender como o erro se comporta em cada modelo, iremos analisar as distribuições percentuais.
+
+```{r, fig.width=10, fig.height=6}
+# Cálculando o erro percentual para cada observação
+# Linear
+linear_model_predctions$mpe <- ((linear_model_predctions$observado - linear_model_predctions$.pred)/linear_model_predctions$observado)*100
+# Ridge
+ridge_model_predctions$mpe <- ((ridge_model_predctions$observado - ridge_model_predctions$.pred)/ridge_model_predctions$observado)*100
+# Floresta Aleatoria
+rf_model_predctions$mpe <- ((rf_model_predctions$observado - rf_model_predctions$.pred)/rf_model_predctions$observado)*100
+# Gradient Boosted
+boosting_model_predctions$mpe <- ((boosting_model_predctions$observado - boosting_model_predctions$.pred)/boosting_model_predctions$observado)*100
+
+# Cálculando média e desvio padrão
+# Linear
+linear_mpe_mean <- mean(linear_model_predctions$mpe)
+linear_mpe_desv <- sd(linear_model_predctions$mpe)
+# Ridge
+ridge_mpe_mean <- mean(ridge_model_predctions$mpe)
+ridge_mpe_desv <- sd(ridge_model_predctions$mpe)
+# Floresta Aleatória
+rf_mpe_mean <- mean(rf_model_predctions$mpe)
+rf_mpe_desv <- sd(rf_model_predctions$mpe)
+# Gradient Boosting
+boosting_mpe_mean <- mean(boosting_model_predctions$mpe)
+boosting_mpe_desv <- sd(boosting_model_predctions$mpe)
+
+# Plotando as distribuições
+# Histograma Modelo Linear
+linear_hist <- ggplot(linear_model_predctions, aes(x = mpe)) + 
+  geom_histogram(binwidth = 1, fill = "orange", alpha = 0.7) + 
+  geom_vline(xintercept = linear_mpe_mean, color = "blue", linetype = "dashed", linewidth = 1) +
+  geom_vline(xintercept = c(linear_mpe_mean - linear_mpe_desv, linear_mpe_mean + linear_mpe_desv), color = "red", linetype = "dashed", linewidth = 1) +
+  geom_text(x = linear_mpe_mean - linear_mpe_desv, y = 0, label = sprintf("SD=%.2f", linear_mpe_desv), color = "red", size = 3) +
+  theme_minimal() + 
+  labs(
+    title = "Linear",
+    x = "Erro Percentual (%)",
+    y = "Frequência"
+  )
+
+# Histograma Modelo Ridge
+ridge_hist <- ggplot(ridge_model_predctions, aes(x = mpe)) + 
+  geom_histogram(binwidth = 1, fill = "orange", alpha = 0.7) + 
+  geom_vline(xintercept = ridge_mpe_mean, color = "blue", linetype = "dashed", linewidth = 1) +
+  geom_vline(xintercept = c(ridge_mpe_mean - ridge_mpe_desv, ridge_mpe_mean + ridge_mpe_desv), color = "red", linetype = "dashed", linewidth = 1) +
+  geom_text(x = ridge_mpe_mean - ridge_mpe_desv, y = 0, label = sprintf("SD=%.2f", ridge_mpe_desv), color = "red", size = 3) +
+  theme_minimal() + 
+  labs(
+    title = "Ridge",
+    x = "Erro Percentual (%)",
+    y = "Frequência"
+  )
+
+# Histograma Modelo Floresta Aleatória
+rf_hist <- ggplot(rf_model_predctions, aes(x = mpe)) + 
+  geom_histogram(binwidth = 1, fill = "orange", alpha = 0.7) + 
+  geom_vline(xintercept = rf_mpe_mean, color = "blue", linetype = "dashed", linewidth = 1) +
+  geom_vline(xintercept = c(rf_mpe_mean - rf_mpe_desv, rf_mpe_mean + rf_mpe_desv), color = "red", linetype = "dashed", linewidth = 1) +
+  geom_text(x = rf_mpe_mean - rf_mpe_desv, y = 0, label = sprintf("SD=%.2f", rf_mpe_desv), color = "red", size = 3) +
+  theme_minimal() + 
+  labs(
+    title = "Floresta Aleatória",
+    x = "Erro Percentual (%)",
+    y = "Frequência"
+  )
+
+# Histograma Modelo Gradient Boosting
+boosting_hist <- ggplot(boosting_model_predctions, aes(x = mpe)) + 
+  geom_histogram(binwidth = 1, fill = "orange", alpha = 0.7) + 
+  geom_vline(xintercept = boosting_mpe_mean, color = "blue", linetype = "dashed", linewidth = 1) +
+  geom_vline(xintercept = c(boosting_mpe_mean - boosting_mpe_desv, boosting_mpe_mean + boosting_mpe_desv), color = "red", linetype = "dashed", linewidth = 1) +
+  geom_text(x = boosting_mpe_mean - boosting_mpe_desv, y = 0, label = sprintf("SD=%.2f", boosting_mpe_desv), color = "red", size = 3) +
+  theme_minimal() + 
+  labs(
+    title = "Gradient Boosting",
+    x = "Erro Percentual (%)",
+    y = "Frequência"
+  )
+
+# Criando matriz de plot com gridExtra
+combined_hist <- grid.arrange(linear_hist, ridge_hist, rf_hist, boosting_hist, ncol = 2, nrow = 2)
+
+# Exibindo os gráficos combinados
+print(combined_hist)
+```
+
+Ao analisarmos as distribuições plotadas, observamos que todas as médias dos resíduos percentuais convergem para zero, apresentando distribuições normais em torno dessa média. Notavelmente, os modelos baseados em árvores exibem um desvio padrão menor em comparação com os modelos lineares, indicando uma maior precisão na predição dos valores.
+
+Além disso, é possível notar que em todos os modelos há algumas observações com erros percentuais significativos, ultrapassando os 100%. No entanto, os modelos baseados em árvores de decisão apresentam essas anomalias apenas em valores de erro percentual negativo. Isso sugere que alguns imóveis estão sendo subestimados, ressaltando uma tendência específica nessas predições.
+
+Como temos uma diferença de escala significativa no preço dos imóveis desta base de dados, iremo analisar a capacidade de cada modelo em acertar a predição conforme o preço do imóvel aumenta.
+
+```{r, fig.width=10, fig.height=6}
+# Gráfico linear
+linear_plot1 <- ggplot(linear_model_predctions, aes(x=observado, y=mpe)) + 
+  geom_point(aes(color = mpe)) + 
+  geom_hline(yintercept=0, linetype="dashed", color="red") + 
+  scale_color_gradient(low = "#FFA07A", high = "#FF6347") +  # Adicionado esta linha
+  theme_minimal() + 
+  labs(
+    title = "Linear",
+    x = "Valores Observadoss",
+    y = "Resíduos Percentuais",
+    color = "Resíduo"
+  )
+
+# Gráfico Ridge
+ridge_plot1 <- ggplot(ridge_model_predctions, aes(x=observado, y=mpe)) + 
+  geom_point(aes(color = mpe)) + 
+  geom_hline(yintercept=0, linetype="dashed", color="red") + 
+  scale_color_gradient(low = "#FFA07A", high = "#FF6347") +  # Adicionado esta linha
+  theme_minimal() + 
+  labs(
+    title = "Lasso",
+    x = "Valores Observados",
+    y = "Resíduos Percentuais",
+    color = "Resíduo"
+  )
+
+# Random Forest
+rf_plot1 <- ggplot(rf_model_predctions, aes(x=observado, y=mpe)) + 
+  geom_point(aes(color = mpe)) + 
+  geom_hline(yintercept=0, linetype="dashed", color="red") + 
+  scale_color_gradient(low = "#FFA07A", high = "#FF6347") +  # Adicionado esta linha
+  theme_minimal() + 
+  labs(
+    title = "Random Forest",
+    x = "Valores Observados",
+    y = "Resíduos Percentuais",
+    color = "Resíduo"
+  )
+
+# Gradient Boosting
+boosting_plot1 <- ggplot(boosting_model_predctions, aes(x=observado, y=mpe)) + 
+  geom_point(aes(color = mpe)) + 
+  geom_hline(yintercept=0, linetype="dashed", color="red") + 
+  scale_color_gradient(low = "#FFA07A", high = "#FF6347") +  # Adicionado esta linha
+  theme_minimal() + 
+  labs(
+    title = "Boosting",
+    x = "Valores Observados",
+    y = "Resíduos Percentuais",
+    color = "Resíduo"
+  )
+
+# Criando matriz de plot com gridExtra
+combined_hist <- grid.arrange(linear_plot1, ridge_plot1, rf_plot1, boosting_plot1, ncol = 2, nrow = 2)
+
+# Exibindo os gráficos combinados
+print(combined_hist)
+```
+
+Ao analisar o gráfico gerado, nota-se que todos os modelos apresentaram erros elevados em algumas observações de apartamentos com valores mais baixos. Além disso, o gráfico também demonstrou o que havia sido descrito anteriormente de que os modelos baseados em árvores conseguiram corrigir os erros percentuais das observações subestimadas. No entanto, esses modelos ainda enfrentaram problemas ao predizer de maneira superestimada o preço de algumas poucas observações.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

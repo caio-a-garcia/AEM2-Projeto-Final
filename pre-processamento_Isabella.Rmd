@@ -27,9 +27,6 @@ library(corrplot)
 library(viridisLite)
 library(cluster)
 ```
-
-
-
 ## Base de dados
 
 Imortando a base de dados para o ambiente do R.
@@ -38,16 +35,12 @@ Imortando a base de dados para o ambiente do R.
 # Lendo o arquivo csv
 df <- read.csv("data/kc_house_data.csv")
 
-# Criando uma cópia do dataframe para comparação pós tratamentos
-df_copy <- df
-
 # Visualizando as primeiras linhas
 head(df, 10)
 ```
 ```{r Número de linhas}
 nrow(df)
 ```
-
 
 ## Valores Nulos
 
@@ -73,6 +66,11 @@ df$date <- as.Date(df$date, format="%Y%m%dT%H%M%S")
 
 # Visualizando mudança
 class(df$date)
+```
+Conferindo se existem dados faltantes com a conversão:
+
+```{r}
+subset(df, is.na(date))
 ```
 
 ## Linhas Duplicadas
@@ -108,9 +106,9 @@ Ao analisarmos o resultado das observações com id duplicadas, percebemos que a
 ```{r Removendo observações desatualizadas}
 # Removendo observações duplicadas desatualizadas
 df <- df %>%
+  arrange(id, desc(date)) %>%
   group_by(id) %>%
-  arrange(desc(date)) %>%
-  slice(1)
+  slice_head(n = 1)
 
 # Visualizando resultado
 any(duplicated(df$id))
@@ -130,12 +128,22 @@ df$date_year <- as.integer(df$date_year)
 # Cálculando a idade do imóvel
 df$age <- df$date_year - df$yr_built
 
-# Removendo colunas date_year e yr_built
-df$date_year <- NULL
-df$yr_built <- NULL
-
 # Visualizando o resultado 
 head(df, 10)
+```
+Avaliando se existe alguma idade negativa:
+
+````{r}
+subset_negativo <- df[df$age < 0, ]
+subset_negativo
+```
+Com o subset obtido acima, verifica-se que 12 imóveis apresentam idade igual a -1. Isso possivelmente se deu pois a venda do imóvel ocorreu antes de sua construção.
+
+Removendo colunas date_year e yr_built:
+
+```{r}
+df$date_year <- NULL
+df$yr_built <- NULL
 ```
 
 Observando a quantidade de linhas não zeradas da coluna yr_renovated
@@ -144,7 +152,7 @@ Observando a quantidade de linhas não zeradas da coluna yr_renovated
 # Cálculando porcentagem de linhas com valores diferentes de zero
 (nrow(df[df$yr_renovated != 0, ])/nrow(df))*100
 ```
-Considerando que apenas cerca de 4% das observações apresentam valores não nulos na coluna yr_renovated, decidimos transformar essa coluna em uma variável binária. Essa variável indicará se o imóvel foi (1) ou não (0) renovado. Essa abordagem simplifica a informação, tornando-a mais relevante para análises e modelagem subsequentes. Além disso, contribui para a eficácia e interpretabilidade do conjunto de dados, facilitando sua interpretação.
+Considerando que apenas cerca de 4% das observações apresentam valores não nulos na coluna yr_renovated, decidimos transformar essa coluna em uma variável binária. Essa variável indicará se o imóvel foi (1) ou não (0) renovado. Essa abordagem simplifica a informação, tornando-a mais relevante para análises e modelagem subsequentes. Além disso, contribui para a interpretabilidade do conjunto de dados.
 
 ```{r Modifianco coluna yr_renovated}
 # Criando coluna binaria
@@ -172,10 +180,10 @@ E com isso temos as seguintes colunas representando informações temporais dent
 
 Dentre as variaveis preditoras temos 5 que representam o tamanho do apartamento, são elas:
 
-- sqft_living: Área habitável(Construida) da casa em pés quadrados;
-- sqft_lot: Área total do terreno em pés quadrados;
-- sqft_above: Área da casa excluindo o porão em pés quadrados;
-- sqft_basement: Área de porão em pés quadrados.
+- sqft_living: Metragem quadrada da área habitável da casa;
+- sqft_lot: Metragem quadrada do terreno em pés;
+- sqft_above: Metragem quadrada da casa excluindo o porão em pés;
+- sqft_basement: Metragem quadrada do porão em pés.
 - sqft_living15: Área hábitavel em 2015 (implica algumas reformas). Isso pode ou não ter afetado a metragem do terreno;
 - sqft_lot15: Área do terreno em 2015 (implica algumas reformas). Isso pode ou não ter afetado a metragem do terreno;
 
@@ -236,8 +244,8 @@ Observando a distribuição desta nova variavel criada.
 ```{r Histograma basement_percent}
 ggplot(df, aes(x = basement_percent*100)) +
   geom_histogram(binwidth = 5, fill = "blue", color = "black", alpha = 0.7) +
-  labs(title = "Distribuição do Percentual de porão",
-       x = "Percentual de porão em relação a área habitavel",
+  labs(title = "Distribuição do Percentual de área do porão",
+       x = "Percentual de área de porão em relação a área habitavel",
        y = "Frequência") +
   theme_minimal()
 
@@ -257,7 +265,7 @@ Considerando que a principal métrica no mercado imobiliário para determinar o 
 
 ```{r Cálculando nova métrica}
 # Criando nova métrica
-df$lot_percent <- df$sqft_living / df$sqft_lot
+df$living_percent <- df$sqft_living / df$sqft_lot
 
 # Retirando coluna do dataframe
 df$sqft_lot <- NULL
@@ -268,26 +276,26 @@ head(df, 10)
 Visualizando a distribuição desta nova variavel:
 
 ```{r Histograma lot_percent}
-ggplot(df, aes(x = lot_percent*100)) +
+ggplot(df, aes(x = living_percent*100)) +
   geom_histogram(binwidth = 5, fill = "blue", color = "black", alpha = 0.7) +
-  labs(title = "Distribuição do tamanho do lote em relação a área habitavel",
-       x = "Indice de proporção do tamanho do lote em relação a área habitavel",
+  labs(title = "Distribuição da área habitavel em relação ao tamanho do lote",
+       x = "Proporção da área habitavel em relação ao tamanho do lote",
        y = "Frequência") +
   theme_minimal()
 ```
 Ao analisar o histograma dessa nova variável, é possível observar que alguns imóveis apresentam valores superiores a 100%, indicando uma área construída maior do que a área total do lote. Essa situação pode parecer inicialmente contraditória. No entanto, esse fenômeno ocorre em situações em que o imóvel possui mais de um andar, o que faz com que a área construída possa ultrapassar o tamanho do lote.
 
-Com isso chegamos nas seguintes váriavel preditoras que representam o tamanho do imóvel: 
+Com isso chegamos nas seguintes váriaveis preditoras que representam o tamanho do imóvel: 
 
 - sqft_living: Metragem quadrada da área habitável da casa;
 - basement_percent: Porcentagem de área construida que representa o porão;
-- lot_percent: Porcentagem de área de construida em relação ao tamanho total do terreno.
+- living_percent: Porcentagem de área de construida em relação ao tamanho total do terreno.
 
 
 
 ## Preditoras de Localização
 
-Neste dataframe, encontramos três colunas que denotam a localização do apartamento na cidade: zipcode, latitude e longitude. Com o intuito de privilegiar a interpretabilidade do modelo, buscaremos consolidar essas informações de localização em uma única variável. Essa nova variável representará a classe de localização na qual o imóvel se enquadra. Dado que temos informações sobre apartamentos de diversos intervalos de preço e tamanhos, optaremos por utilizar a métrica de preço por feet quadrado para agrupar essas unidades com base na localização. Essa abordagem proporcionará uma representação mais simplificada e compreensível da informação de localização, contribuindo para a eficácia e interpretabilidade do modelo.
+Neste dataframe, encontramos três colunas que denotam a localização do apartamento na cidade: zipcode, latitude e longitude. Com o intuito de privilegiar a interpretabilidade do modelo, buscaremos consolidar essas informações de localização em uma única variável. Essa nova variável representará a classe de localização na qual o imóvel se enquadra. Dado que temos informações sobre apartamentos de diversos intervalos de preço e tamanhos, optaremos por utilizar a métrica de preço por feet quadrado para agrupar essas unidades com base na localização. Essa abordagem proporcionará uma representação mais simplificada e interpretável da informação de valorização do imóvel conforme a localização.
 
 ```{r, fig.width=10, fig.height=4, out.width='100%'}
 # Criando métrica
@@ -296,15 +304,15 @@ df$price_sqft <- df$price / df$sqft_living
 # Observando a normalização com relação ao preço
 grafico1 <- ggplot(df, aes(x = sqft_living, y = price)) +
   geom_point() +
-  labs(title = "Tamamho do impóvel x preço",
-       x = "Tamanho do impovel",
+  labs(title = "Tamanho do imóvel x preço",
+       x = "Tamanho do imovel",
        y = "Preço") +
   theme_minimal()
 
 grafico2<- ggplot(df, aes(x = sqft_living, y = price_sqft)) +
   geom_point() +
-  labs(title = "Tamamho do impóvel x preço por feet quadrado",
-       x = "Tamanho do impovel",
+  labs(title = "Tamanho do imóvel x preço por feet quadrado",
+       x = "Tamanho do imovel",
        y = "Preço por feet quadrado") +
   theme_minimal()
 
@@ -355,7 +363,6 @@ cat("Quantidade de zipcodes distintos:", quantidade_zipcodes_distintos, "\n")
 Identificamos a presença de 70 códigos postais distintos neste conjunto de dados, o que pode representar um desafio durante a interpretação dos resultados do modelo. Isso se deve ao fato de que seria necessário criar 69 novas colunas de variáveis dummy para incorporar essas informações, o que pode complicar a análise. Diante desse cenário, parece sensato reclassificar essas localizações utilizando um algoritmo de clusterização.
 
 
-
 ```{r}
 # Colunas de informação
 col_mean <- c("lat", "long", "price_sqft")
@@ -375,6 +382,8 @@ Com as informações agrupadas por zipcodes, podemos encontrar o número ótimo 
 
 ```{r}
 # Calcular a soma dos quadrados intra-cluster para diferentes números de clusters
+set.seed(123)
+
 soma_quadrados <- numeric(10)  # Ajuste o número máximo de clusters conforme necessário
 
 for (k in 1:10) {
@@ -390,21 +399,40 @@ plot(1:10, soma_quadrados, type = "b", pch = 19, frame = FALSE,
 Observando o gráfico de cotovelo, o número ótimo de cluster seriam 4 grupos distintos.
 
 ```{r}
-# Setando semente aleatória
-set.seed(39)
+  # Setando semente aleatória
+  set.seed(123)
+  
+  # Executar o algoritmo k-means com 4 clusters
+  numero_clusters <- 4
+  kmeans_result <- kmeans(df_zipcode[,-1], centers = numero_clusters)
+  
+  # Adicionar a coluna 'grupo' ao data frame original indicando o cluster de cada zipcode
+  df_zipcode$grupo <- as.factor(kmeans_result$cluster)
+  
+  # Visualizando
+  df_zipcode
+  
+contagem_por_grupo <- table(df_zipcode$grupo)
 
-# Executar o algoritmo k-means com 4 clusters
-numero_clusters <- 4
-kmeans_result <- kmeans(df_zipcode[,-1], centers = numero_clusters)
+print(contagem_por_grupo)
+```
+Abaixo, a média das informações por grupo:
 
-# Adicionar a coluna 'grupo' ao data frame original indicando o cluster de cada zipcode
-df_zipcode$grupo <- as.factor(kmeans_result$cluster)
-
-# Visualizando
-df_zipcode
+```{r}
+df_zipcode %>%
+  group_by(grupo) %>%
+  summarise(across(all_of(col_mean), mean)) %>% 
+  arrange(desc(price_sqft))
 ```
 
-Agora que temos os zipcodes separados em 4 grupos de acordo com as caracteristicas médias de cada região, podemos adicionar esta nova preditora para o dataframe original.
+Com isso temos as seguintes categorias de localização:
+
+- grupo 2 = classe A
+- grupo 4 = classe B
+- grupo 1 = classe C
+- grupo 3 = classe D
+
+Agora que temos os zipcodes separados em 4 grupos de acordo com as caracteristicas médias de cada região, podemos adicionar esta nova preditora de valorização do imóvel para o dataframe original. 
 
 ```{r}
 # Realizando um leftjoin como dataframe original
@@ -413,38 +441,23 @@ df <- merge(df, df_zipcode[, c("zipcode", "grupo")], by = "zipcode", all.x = TRU
 # Visualizando o resultado
 head(df, 10)
 ```
-Obtendo ordem de sqft_price de cada grupo encontrado.
 
-```{r}
-# Agrupando
-group_sqft_price_mean <- df %>%
-  group_by(grupo) %>%
-  summarise(mean_price_sqft = mean(price_sqft))
-
-# Visualizando
-group_sqft_price_mean
-```
-
-Com isso temos as seguintes categorias de localização:
-
-- grupo3 = classe A
-- grupo2 = classe B
-- grupo1 = classe C
-- grupo4 = classe D
-
-```{r Renomeando grupos de acordo com o preço do metro quadrado médio}
+```{r Renomeando grupos de acordo com a valorização do imóvel}
 df$grupo <- ifelse(df$grupo == 1, "C",
-                 ifelse(df$grupo == 2, "B",
-                        ifelse(df$grupo == 3, "A", "D")))
+                 ifelse(df$grupo == 2, "A",
+                        ifelse(df$grupo == 3, "D", "B")))
+
+df$grupo <- factor(df$grupo)
 ```
+
 
 Visualizando no mapa essa nova classificação.
 
 ```{r}
 # criando coluna de cor
-df$cor <- ifelse(df$grupo == "A", "yellow",
-                 ifelse(df$grupo == "B", "green",
-                        ifelse(df$grupo == "C", "blue", "purple")))
+df$cor <- ifelse(df$grupo == "A", "green",
+                 ifelse(df$grupo == "B", "yellow",
+                        ifelse(df$grupo == "C", "orange", "red")))
 
 # Criar o mapa
 mapa <- leaflet(df) %>%
@@ -462,7 +475,11 @@ mapa <- leaflet(df) %>%
 mapa
 ```
 
-Com essas adaptações, torna-se viável descartar as colunas de zipcode, latitude e longitude. A nova classificação, resultante do algoritmo de clusterização, será empregada como a informação referente à valorização ou desvalorização do imóvel com base em sua localização.
+Visto que será realizada uma análise preditiva do preço do imóvel, nessa etapa também será retirada a variável "price_sqft". A variável foi utilizada para possibilitar o agrupamento que representa a valorização do imóvel, mas não estaria disponível na inclusão de um novo imóvel para o qual se desejaria predizer o preço. 
+
+Com o agrupamento realizado, na inclusão de um novo imóvel atribuiríamos um cluster de valorização a ele conforme seu zipcode, levando-se em conta quais zipcodes fazem parte de cada cluster construído.
+
+Também serão descartadas as colunas de zipcode, latitude, longitude e cor.
 
 ```{r Retirando colunas}
 df$lat <- NULL
@@ -475,7 +492,7 @@ df$price_sqft <- NULL
 
 ## Ajustes finais
 
-As ultimas alteração que será feita é retirar a coluna de id que não representa nenhuma informação relevante para a predição dos preços das casas e a coluna view que apenas representa quantas visistas a casa já recebeu, chegando assim no seguinte dataframe final:
+A ultima alteração que será feita é retirar a coluna de id que não representa nenhuma informação relevante para a predição dos preços das casas e a coluna view que apenas representa quantas visistas a casa já recebeu, chegando assim no seguinte dataframe final:
 
 ```{r}
 # Removendo coluna de id
@@ -485,26 +502,36 @@ df$view <- NULL
 # Visualizando as 10 primeiras linhas
 head(df, 10)
 ```
+Observando a estrutura do df processado:
+
+```{r}
+str(df)
+```
+
 O dicionario de dados para o dataframe processado:
 
 - price: Preço de venda;
 - bedrooms: número de quartos;
+- bathrooms: número de banheiros;
 - sqft_living: Tamanho de área hábitavel(construida);
 - floors: número de andares;
-- waterfront: Casas beira-mar;
+- waterfront: Vista beira-mar;
 - condition: Nota para a condição do imóvel;
-- grade: nota geral atribuída à unidade habitacional, com base no sistema de classificação do Condado de King.
+- grade: nota geral atribuída à unidade habitacional, com base no sistema de classificação do Condado de King;
 - age: idade do imóvel;
-- renovated: (1) se o imóvel foi renovado em algum momento e (0) se não foi. 
+- renovated: (1) se o imóvel foi renovado em algum momento e (0) se não foi;
 - basement_percent: Porcentagem de área construida que representa o porão;
-- lot_percent: Porcentagem de área de construida em relação ao tamanho total do terreno.
+- living_percent: Porcentagem de área de construida em relação ao tamanho total do terreno;
+- grupo: cluster de localização conforme preço da área.
 
 
 Salvando arquivo final para a ánalise exploratoria:
 
 ```{r}
 write.csv(df, "data/df_pre_processamento.csv", row.names = FALSE)
+dim(df)
 ```
+
 
 
 
