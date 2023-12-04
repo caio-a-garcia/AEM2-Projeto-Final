@@ -2514,7 +2514,7 @@ df_semcluster_results &lt;- read.csv(&quot;data/df_semcluster_results.csv&quot;)
 rmarkdown::paged_table(df_semcluster_results)</code></pre>
 <div data-pagedtable="false">
 <script data-pagedtable-source type="application/json">
-{"columns":[{"label":["Modelo"],"name":[1],"type":["chr"],"align":["left"]},{"label":["EQM"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["MAPE"],"name":[3],"type":["dbl"],"align":["right"]}],"data":[{"1":"Linear","2":"23550822604","3":"19.43393"},{"1":"Ridge","2":"23879513195","3":"18.80380"},{"1":"Floresta Aleatória","2":"14796974568","3":"12.69010"},{"1":"Gradient Boosted","2":"12219436349","3":"11.79069"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+{"columns":[{"label":["Modelo"],"name":[1],"type":["chr"],"align":["left"]},{"label":["EQM"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["MAPE"],"name":[3],"type":["dbl"],"align":["right"]}],"data":[{"1":"Linear","2":"23550822604","3":"19.43393"},{"1":"Ridge","2":"23879513195","3":"18.80380"},{"1":"Floresta Aleatória","2":"14796974568","3":"12.69010"},{"1":"Gradient Boosted","2":"11525781926","3":"11.88556"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
   </script>
 </div>
 <p>Criando uma tabela de comparação percentual no ganho de predição ao
@@ -2537,7 +2537,7 @@ df_cluster_compare &lt;- data.frame(
 rmarkdown::paged_table(df_cluster_compare)</code></pre>
 <div data-pagedtable="false">
 <script data-pagedtable-source type="application/json">
-{"columns":[{"label":["Modelo"],"name":[1],"type":["chr"],"align":["left"]},{"label":["EQM_percent"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["MAPE_percent"],"name":[3],"type":["dbl"],"align":["right"]}],"data":[{"1":"Linear","2":"18.59068","3":"12.33277"},{"1":"Ridge","2":"19.87992","3":"11.06041"},{"1":"Floresta Aleatória","2":"20.29439","3":"16.87299"},{"1":"Gradient Boosted","2":"32.20086","3":"22.12283"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+{"columns":[{"label":["Modelo"],"name":[1],"type":["chr"],"align":["left"]},{"label":["EQM_percent"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["MAPE_percent"],"name":[3],"type":["dbl"],"align":["right"]}],"data":[{"1":"Linear","2":"18.59068","3":"12.33277"},{"1":"Ridge","2":"19.87992","3":"11.06041"},{"1":"Floresta Aleatória","2":"20.29439","3":"16.87299"},{"1":"Gradient Boosted","2":"36.04958","3":"21.49621"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
   </script>
 </div>
 <p>Observa-se uma melhoria percentual no erro para todos os modelos

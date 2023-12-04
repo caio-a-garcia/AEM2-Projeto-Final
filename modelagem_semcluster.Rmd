@@ -48,7 +48,7 @@ library(gridExtra)
 Importando a base de dados gerada na etapa de pré-processament:
 
 ```{r}
-df_semcluster <- read.csv("data/df_pre_processamento_semcluster.csv")
+df_semcluster <- read.csv("df_pre_processamento_semcluster.csv")
 
 df_semcluster$waterfront <- factor(df_semcluster$waterfront)
 df_semcluster$renovated <- factor(df_semcluster$renovated)
@@ -208,6 +208,8 @@ linear_model_fit <- linear_model %>%
 summary(linear_model_fit$fit)
 ```
 
+Observando a coluna Pr(\>\|t\|), percebe-se que todas as variáveis preditoras apresentam a indicação de três asteriscos (\*\*\*), o que sugere que elas possuem o mais elevado nível de significância contra a hipótese nula de que o coeficiente é zero. Em outras palavras, para o modelo linear simples e sem penalização, todas as variáveis preditoras contribuem significativamente para a predição do preço do imóvel.
+
 Com o modelo treinado, podemos realizar as predições com base no conjunto de teste.
 
 ```{r}
@@ -338,44 +340,37 @@ A estratégia para otimizar esses hiperparametros será a validação cruzada pa
 # Paralelizando para obter um processamento mais rápido
 
 # Determinar o número de núcleos a serem utilizados
-#num_cores <- detectCores() - 1 # deixando um núcleo livre
+num_cores <- detectCores() - 1 # deixando um núcleo livre
 
 # Registrar o backend paralelo
-#registerDoParallel(cores = num_cores)
+registerDoParallel(cores = num_cores)
 
 # Realizando a otimização
-#grid_rf_result <- tune_grid(
-  #rf_model,
-  #receita,
-  #resamples = cv_folds
-#)
+grid_rf_result <- tune_grid(
+  rf_model,
+  receita,
+  resamples = cv_folds
+)
 
 # Finalizando a paralelização após a conclusão da tarefa
-#stopImplicitCluster()
+stopImplicitCluster()
 ```
 
 ```{r Visualizando os resultados do grid}
 # Visualize os resultados
-#grid_rf_result %>%
-  #collect_metrics() %>%
-  #filter(.metric == "rmse") %>%
-  #arrange(mean) 
+grid_rf_result %>%
+  collect_metrics() %>%
+  filter(.metric == "rmse") %>%
+  arrange(mean) 
 ```
 
 Com as combinações cálculadas, retreinamos o modelo com esses hiperparametros.
 
 ```{r}
 # Melhor combinação 
-#rf_best_hip <- select_best(grid_rf_result, "rmse")
+rf_best_hip <- select_best(grid_rf_result, "rmse")
 
-#write_csv(rf_best_hip, "data/rf_best_hip_semcluster.csv")
-
-#rf_best_hip
-```
-
-```{r}
-# Lendo arquivo CSV com hiperparametros otimizados
-rf_best_hip <- read.csv("data/rf_best_hip_semcluster.csv")
+write_csv(rf_best_hip, "rf_best_hip_semcluster.csv")
 
 rf_best_hip
 ```
@@ -436,51 +431,53 @@ Criando grade de hiperparametros
 
 ```{r}
 # Definindo a especificação dos parâmetros
-#param_spec <- parameters(boosting_model)
+param_spec <- parameters(boosting_model)
 
 # Criar a grade Aleatoria
-#set.seed(39) # para reprodutibilidade
-#random_grid <- grid_random(param_spec, size = 50) # cria 50 combinações Aleatorias
+set.seed(39) # para reprodutibilidade
+random_grid <- grid_random(param_spec, size = 50) # cria 50 combinações Aleatorias
 ```
 a grade de hiperparametros ajustada, podemos realizar a validação cruzada para encontrar a melhor combinação. Ressaltando que também utilizaremos a paralelização do código para obter um processamento mais rapido. 
 
 ```{r}
 # Configurando a semente para reprodutibilidade
-#set.seed(39)
+set.seed(39)
 
 # Configurando a paralelização
-#num_cores <- detectCores() - 1 # deixando um núcleo livre
-#registerDoParallel(cores = num_cores)
+num_cores <- detectCores() - 1 # deixando um núcleo livre
+registerDoParallel(cores = num_cores)
 
 # Medindo o tempo de execução e realizando a validação cruzada
 
-#grid_boosting_results <- tune_grid(
-  #boosting_model,
-  #receita,
-  #resamples = cv_folds)
+grid_boosting_results <- tune_grid(
+  boosting_model,
+  receita,
+  resamples = cv_folds,
+  grid = random_grid)
 
 # Finalizando a paralelização
-#stopImplicitCluster()
+stopImplicitCluster()
 ```
 
 
 ```{r}
 # Melhor combinação 
-#boosting_best_hip <- select_best(grid_boosting_results, "rmse")
+boosting_best_hip <- select_best(grid_boosting_results, "rmse")
 
 # Salvando em um arquivo csv
-#write_csv(boosting_best_hip, "data/boosting_best_hip_semcluster.csv")
+write_csv(boosting_best_hip, "boosting_best_hip_semcluster.csv")
 
-#boosting_best_hip
+boosting_best_hip
 ```
 **OBS:Como o tempo de processamento é elevado para o modelo do XGboosting, os hiperparamentros otimizados serão salvos em um arquivo csv para não ser preciso rodar todas as interações novamente**
 
 ```{r}
 # Lendo os hiperparametros otimizados
-boosting_best_hip <- read.csv("data/boosting_best_hip.csv")
+boosting_best_hip <- read.csv("boosting_best_hip_semcluster.csv")
 
 # Visualizando 
 rmarkdown::paged_table(boosting_best_hip)
+
 ```
 A partir dos hiperparametros otimizados, o modelo será retreinado.
 
@@ -518,6 +515,13 @@ df_semcluster_results[df_semcluster_results$Modelo == "Gradient Boosted", "MAPE"
 
 rmarkdown::paged_table(df_semcluster_results)
 
+```
+
+```{r}
+# Salvando em um arquivo csv
+write_csv(df_semcluster_results, "df_semcluster_results.csv")
+
+df_semcluster_results
 ```
 
 
@@ -685,13 +689,6 @@ print(combined_hist)
 Ao analisar o gráfico gerado, nota-se que todos os modelos apresentaram erros elevados em algumas observações de apartamentos com valores mais baixos. Além disso, o gráfico também demonstrou o que havia sido descrito anteriormente de que os modelos baseados em árvores conseguiram corrigir os erros percentuais das observações subestimadas. No entanto, esses modelos ainda enfrentaram problemas ao predizer de maneira superestimada o preço de algumas poucas observações.
 
 
-### Final
-
-Salvando resultados para comparação com a modelagem com cluster
-
-```{r}
-write_csv(df_semcluster_results, "data/df_semcluster_results.csv")
-```
 
 
 
