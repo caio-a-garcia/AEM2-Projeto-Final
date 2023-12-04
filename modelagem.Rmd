@@ -61,7 +61,6 @@ rmarkdown::paged_table(head(df))
 
 Para a comparação dos modelos, optaremos por utilizar a métrica de Erro Quadrático Médio (EQM). Contudo, dada a grande disparidade de escala na coluna target, representando imóveis com preços bastante distintos, reconhecemos a necessidade de aprimorar a interpretação do EQM. Para abordar esse desafio, calcularemos o EQM em termos percentuais, normalizando o erro pela magnitude dos valores observados. Esta abordagem, conhecida como Erro Percentual, será obtida ao dividir o erro pelo valor real, proporcionando uma visão mais significativa e intuitiva do desempenho dos modelos em cenários com variação expressiva nos preços. Portanto, o dataframe que armazenará os resultados de cada algoritmo incluirá tanto o EQM convencional quanto o EQM percentual, oferecendo uma análise abrangente e aprimorada do desempenho preditivo.
 
-$ MAPE = \frac{1}{n} \sum\_{i=1}\^{n} \left\| \frac{Y_i - \hat{Y}_i}{Y_i} \right\| \times 100 $
 
 ```{r}
 df_results <- data.frame(
@@ -692,14 +691,22 @@ Ao analisar o gráfico gerado, nota-se que todos os modelos apresentaram erros e
 
 ## Comparando modelos com e sem clusterização
 
-Para comparar o resultado utilizando a clusterização dos zipcodes com base na latitude, longitude e preço do metro quadrado, foi realizada a modelagem sem esta clusterização. Os resultados estão dispostos abaixo:
+Com o objetivo de avaliar a contribuição da análise não supervisionada de agrupamento realizada na etapa de pré-processamento, foram aplicados os modelos de regressão no dataset que mantém as colunas de latitude, longitude e zipcode. Abaixo, uma visualização do dataframe sem clusterização:
+
+```{r}
+df_semcluster <- read.csv("data/df_pre_processamento_semcluster.csv")
+
+rmarkdown::paged_table(head(df_semcluster))
+```
+
+Para esse comparativo, foram otimizados novamente os hiperparâmetros da floresta aleatória e do boosting, de modo a compreendermos o potencial da modelagem sem a análise não supervisionada. Os resultados podem ser observados abaixo:
 
 ```{r}
 # Lendo arquivo csv
 df_semcluster_results <- read.csv("data/df_semcluster_results.csv")
 
 # Visualização
-df_semcluster_results
+rmarkdown::paged_table(df_semcluster_results)
 ```
 
 Criando uma tabela de comparação percentual no ganho de predição ao não utilizar a clusterização:
@@ -725,6 +732,8 @@ rmarkdown::paged_table(df_cluster_compare)
 ```
 
 Observa-se uma melhoria percentual no erro para todos os modelos analisados. No caso do modelo de gradient boosting, em particular, verificou-se uma redução de 32% no erro quadrático médio e de 22% no erro percentual absoluto. Esses resultados indicam que a ausência da clusterização está associada a um ganho significativo no poder preditivo.
+
+
 
 
 

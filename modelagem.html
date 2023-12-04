@@ -1773,7 +1773,6 @@ nos preços. Portanto, o dataframe que armazenará os resultados de cada
 algoritmo incluirá tanto o EQM convencional quanto o EQM percentual,
 oferecendo uma análise abrangente e aprimorada do desempenho
 preditivo.</p>
-<p>$ MAPE = _{i=1}^{n} | | $</p>
 <pre class="r"><code>df_results &lt;- data.frame(
     Modelo = c(&quot;Linear&quot;, &quot;Ridge&quot;, &quot;Floresta Aleatória&quot;, &quot;Gradient Boosted&quot;),
     EQM = c(NA, NA, NA, NA),
@@ -2491,20 +2490,33 @@ maneira superestimada o preço de algumas poucas observações.</p>
 </div>
 <div id="comparando-modelos-com-e-sem-clusterização" class="section level2">
 <h2>Comparando modelos com e sem clusterização</h2>
-<p>Para comparar o resultado utilizando a clusterização dos zipcodes com
-base na latitude, longitude e preço do metro quadrado, foi realizada a
-modelagem sem esta clusterização. Os resultados estão dispostos
-abaixo:</p>
+<p>Com o objetivo de avaliar a contribuição da análise não
+supervisionada de agrupamento realizada na etapa de pré-processamento,
+foram aplicados os modelos de regressão no dataset que mantém as colunas
+de latitude, longitude e zipcode. Abaixo, uma visualização do dataframe
+sem clusterização:</p>
+<pre class="r"><code>df_semcluster &lt;- read.csv(&quot;data/df_pre_processamento_semcluster.csv&quot;)
+
+rmarkdown::paged_table(head(df_semcluster))</code></pre>
+<div data-pagedtable="false">
+<script data-pagedtable-source type="application/json">
+{"columns":[{"label":[""],"name":["_rn_"],"type":[""],"align":["left"]},{"label":["price"],"name":[1],"type":["dbl"],"align":["right"]},{"label":["bathrooms"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["sqft_living"],"name":[3],"type":["int"],"align":["right"]},{"label":["floors"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["waterfront"],"name":[5],"type":["int"],"align":["right"]},{"label":["condition"],"name":[6],"type":["int"],"align":["right"]},{"label":["grade"],"name":[7],"type":["int"],"align":["right"]},{"label":["zipcode"],"name":[8],"type":["int"],"align":["right"]},{"label":["lat"],"name":[9],"type":["dbl"],"align":["right"]},{"label":["long"],"name":[10],"type":["dbl"],"align":["right"]},{"label":["age"],"name":[11],"type":["int"],"align":["right"]},{"label":["renovated"],"name":[12],"type":["int"],"align":["right"]},{"label":["basement_percent"],"name":[13],"type":["dbl"],"align":["right"]},{"label":["living_percent"],"name":[14],"type":["dbl"],"align":["right"]},{"label":["categoria_quartos"],"name":[15],"type":["chr"],"align":["left"]}],"data":[{"1":"300000","2":"3.00","3":"2400","4":"2.0","5":"0","6":"3","7":"7","8":"98002","9":"47.3262","10":"-122.214","11":"24","12":"0","13":"0.0000000","14":"0.25605462","15":">5","_rn_":"1"},{"1":"647500","2":"1.75","3":"2060","4":"1.0","5":"0","6":"4","7":"8","8":"98166","9":"47.4444","10":"-122.351","11":"67","12":"0","13":"0.4368932","14":"0.07912122","15":"4","_rn_":"2"},{"1":"400000","2":"1.00","3":"1460","4":"1.0","5":"0","6":"3","7":"7","8":"98166","9":"47.4434","10":"-122.347","11":"62","12":"0","13":"0.0000000","14":"0.03395349","15":"3","_rn_":"3"},{"1":"235000","2":"1.00","3":"1430","4":"1.5","5":"0","6":"4","7":"6","8":"98168","9":"47.4783","10":"-122.265","11":"85","12":"0","13":"0.2937063","14":"0.18818266","15":"3","_rn_":"4"},{"1":"402500","2":"2.00","3":"1650","4":"1.0","5":"0","6":"3","7":"7","8":"98144","9":"47.5803","10":"-122.294","11":"64","12":"1","13":"0.5393939","14":"0.47089041","15":"4","_rn_":"5"},{"1":"680000","2":"2.75","3":"2220","4":"1.0","5":"0","6":"5","7":"7","8":"98144","9":"47.5801","10":"-122.294","11":"64","12":"0","13":"0.4729730","14":"0.41807910","15":"4","_rn_":"6"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+  </script>
+</div>
+<p>Para esse comparativo, foram otimizados novamente os hiperparâmetros
+da floresta aleatória e do boosting, de modo a compreendermos o
+potencial da modelagem sem a análise não supervisionada. Os resultados
+podem ser observados abaixo:</p>
 <pre class="r"><code># Lendo arquivo csv
 df_semcluster_results &lt;- read.csv(&quot;data/df_semcluster_results.csv&quot;)
 
 # Visualização
-df_semcluster_results</code></pre>
-<pre><code>##               Modelo         EQM     MAPE
-## 1             Linear 23550822604 19.43393
-## 2              Ridge 23879513195 18.80380
-## 3 Floresta Aleatória 14796974568 12.69010
-## 4   Gradient Boosted 12219436349 11.79069</code></pre>
+rmarkdown::paged_table(df_semcluster_results)</code></pre>
+<div data-pagedtable="false">
+<script data-pagedtable-source type="application/json">
+{"columns":[{"label":["Modelo"],"name":[1],"type":["chr"],"align":["left"]},{"label":["EQM"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["MAPE"],"name":[3],"type":["dbl"],"align":["right"]}],"data":[{"1":"Linear","2":"23550822604","3":"19.43393"},{"1":"Ridge","2":"23879513195","3":"18.80380"},{"1":"Floresta Aleatória","2":"14796974568","3":"12.69010"},{"1":"Gradient Boosted","2":"12219436349","3":"11.79069"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+  </script>
+</div>
 <p>Criando uma tabela de comparação percentual no ganho de predição ao
 não utilizar a clusterização:</p>
 <pre class="r"><code># Criando função do calculo percentual de EQM e MAPE
