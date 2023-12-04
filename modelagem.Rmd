@@ -1,11 +1,24 @@
 ---
-title: "Modelagem"
-author: "Murilo, Caio e Isabella"
-date: "2023-11-28"
-output: html_document
+output:
+  html_document:
+    code_folding: hide
 ---
 
-# Modelagem
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE, warning = FALSE, message = FALSE)
+knitr::opts_knit$set(copy.extra = TRUE)
+knitr::opts_chunk$set(fig.show = "asis")
+paleta <- c("#4979A9","#D78463","#6190C3","#DF9C81","#98B7D4","#E8B6A2","#C1D6E5")
+```
+
+```{css, echo=FALSE}
+body {
+  background-color: #F5F5F5; 
+}
+```
+<br>
+
+[Modelagem]{style="color: #436F9B;font-size:36px;"}
 
 O objetivo deste rmarkdown é realizar a modelagem estatística para a base de dados tratada na etapa de pré-processamento. Para isso, compararemos o desempenho de quatro modelos de regressão com o objetivo de predizer o preço dos imóveis a partir das variáveis preditoras geradas nessa etapa. Os modelos que serão utilizados nesta comparação são:
 
@@ -14,9 +27,9 @@ O objetivo deste rmarkdown é realizar a modelagem estatística para a base de d
 -   Floresta Aleatória
 -   Gradient Boosting
 
-## Bibliotecas
+### Bibliotecas
 
-Carregando as bibliotecas utilizadas no projeto.
+Carregando as bibliotecas utilizadas no projeto:
 
 ```{r Bibliotecas}
 library(tidyverse)
@@ -29,18 +42,22 @@ library(rsample)
 library(gridExtra)
 ```
 
-## Carregando base de dados
+### Carregando base de dados
 
-Importando a base de dados gerada na etapa de pré-processamento.
+Importando a base de dados gerada na etapa de pré-processament:
 
 ```{r}
 df <- read.csv("data/df_pre_processamento.csv")
 
+df$grupo <- factor(df$grupo)
+df$waterfront <- factor(df$waterfront)
+df$renovated <- factor(df$renovated)
+df$categoria_quartos <- factor(df$categoria_quartos)
 
-head(df, 10)
+rmarkdown::paged_table(head(df))
 ```
 
-## Métrica de Desempenho
+### Métricas de Desempenho
 
 Para a comparação dos modelos, optaremos por utilizar a métrica de Erro Quadrático Médio (EQM). Contudo, dada a grande disparidade de escala na coluna target, representando imóveis com preços bastante distintos, reconhecemos a necessidade de aprimorar a interpretação do EQM. Para abordar esse desafio, calcularemos o EQM em termos percentuais, normalizando o erro pela magnitude dos valores observados. Esta abordagem, conhecida como Erro Percentual, será obtida ao dividir o erro pelo valor real, proporcionando uma visão mais significativa e intuitiva do desempenho dos modelos em cenários com variação expressiva nos preços. Portanto, o dataframe que armazenará os resultados de cada algoritmo incluirá tanto o EQM convencional quanto o EQM percentual, oferecendo uma análise abrangente e aprimorada do desempenho preditivo.
 
@@ -53,10 +70,10 @@ df_results <- data.frame(
     MAPE = c(NA, NA, NA, NA)
 )
 
-print(df_results)
+rmarkdown::paged_table(head(df_results))
 ```
 
-## Conjunto de teste e treinamento
+### Conjunto de teste e treinamento
 
 Separando os conjuntos de teste e treinamento. Os mesmos conjuntos serão utilizados para comparar o desempenho dos modelos.
 
@@ -129,7 +146,7 @@ prop.table(table(conj_teste$renovated))
 
 Assim como para o conjunto de treinamento, a estratificação foi satisfatória para o conjunto de teste.
 
-## Definindo receita
+### Definindo receita
 
 Para realizar a modelagem de maneira eficaz, será utilizado a função recipe() da biblioteca tidymodels para normalizar as colunas númericas e criar as váriaveis dummy nas colunas categoricas.
 
@@ -154,7 +171,7 @@ conj_teste_baked <- bake(receita_prep, new_data = conj_teste)
 Observando o processamento do conjunto de treinamento:
 
 ```{r}
-head(conj_treino_baked, 10)
+rmarkdown::paged_table(head(conj_treino_baked))
 ```
 
 ## Modelagem
@@ -195,28 +212,28 @@ Com o modelo treinado, podemos realizar as predições com base no conjunto de t
 
 ```{r}
 # Realizando a predição
-linear_model_predctions <- linear_model_fit %>%
+linear_model_predictions <- linear_model_fit %>%
   predict(new_data = conj_teste_baked) %>%
   mutate(observado = conj_teste_baked$price, modelo = "Linear")
 
 # Visualizando as primeiras 10 linhas
-head(linear_model_predctions, 10)
+rmarkdown::paged_table(linear_model_predictions)
 ```
 
 Cálculando métricas de desempenho.
 
 ```{r}
 # Cálculando erro quadrático médio
-eqm_linear <- (rmse(linear_model_predctions, observado, .pred)$.estimate)**2
+eqm_linear <- (rmse(linear_model_predictions, observado, .pred)$.estimate)**2
 
 # Cálculando erro percentual absoluto médio(MAPE)
-mape_linear <- mean(abs((linear_model_predctions$observado - linear_model_predctions$.pred)/linear_model_predctions$observado)*100)
+mape_linear <- mean(abs((linear_model_predictions$observado - linear_model_predictions$.pred)/linear_model_predictions$observado)*100)
 
 # Adicionando resultados para o df de comparação
 df_results[df_results$Modelo == "Linear", "EQM"] <- eqm_linear
 df_results[df_results$Modelo == "Linear", "MAPE"] <- mape_linear
 
-df_results
+rmarkdown::paged_table(df_results)
 ```
 
 Observando os resultados para o modelo linear, este algoritmo tem um erro médio de aproximadamente 22%. 
@@ -252,7 +269,7 @@ grid_ridge_result %>%
 
 Ao analisar os resultados da otimização, notamos que o erro só apresenta mudanças significativas para valores de $\lambda$ extremamente altos. Em outras palavras, as variáveis requerem uma penalização substancial para terem seus coeficientes reduzidos a zero. Dado que a penalidade não impactou significativamente o desempenho do modelo, optaremos pelo menor valor de $\lambda$ obtido. Contudo, é importante salientar que, neste contexto, o uso do modelo Lasso não oferece vantagens em relação à regressão linear simples.
 
-```{r Modelo Final}
+```{r}
 ridge_model_final <- ridge_model %>%
   finalize_model(tibble(penalty = 0.0001)) %>%
   fit(price ~., data=conj_treino_baked)
@@ -264,27 +281,28 @@ Com o hiperparametro otimizado, podemos realizar as predições do conjunto de t
 
 ```{r Predição do Conjunto de Teste}
 # Realizando a predição
-ridge_model_predctions <- ridge_model_final %>%
+ridge_model_predictions <- ridge_model_final %>%
   predict(new_data = conj_teste_baked) %>%
   mutate(observado = conj_teste_baked$price, modelo = "Ridge")
 
 # Visualizando as primeiras 10 linhas
-head(ridge_model_predctions, 10)
+rmarkdown::paged_table(ridge_model_predictions)
 ```
 Cálculando métricas de desempenho.
 
 ```{r}
 # Cálculando erro quadrático médio
-eqm_ridge <- (rmse(ridge_model_predctions, observado, .pred)$.estimate)**2
+eqm_ridge <- (rmse(ridge_model_predictions, observado, .pred)$.estimate)**2
 
 # Cálculando erro percentual absoluto médio(MAPE)
-mape_ridge <- mean(abs((ridge_model_predctions$observado - ridge_model_predctions$.pred)/ridge_model_predctions$observado)*100)
+mape_ridge <- mean(abs((ridge_model_predictions$observado - ridge_model_predictions$.pred)/ridge_model_predictions$observado)*100)
 
 # Adicionando resultados para o df de comparação
 df_results[df_results$Modelo == "Ridge", "EQM"] <- eqm_ridge
 df_results[df_results$Modelo == "Ridge", "MAPE"] <- mape_ridge
 
-df_results
+rmarkdown::paged_table(df_results)
+
 ```
 Como já era esperado pelo resultado observado na validação cruzada, a penalização não ofereceu nenhuma vantagem significativa para o modelo.
 
@@ -320,39 +338,51 @@ A estratégia para otimizar esses hiperparametros será a validação cruzada pa
 # Paralelizando para obter um processamento mais rápido
 
 # Determinar o número de núcleos a serem utilizados
-num_cores <- detectCores() - 1 # deixando um núcleo livre
+#num_cores <- detectCores() - 1 # deixando um núcleo livre
 
 # Registrar o backend paralelo
-registerDoParallel(cores = num_cores)
+#registerDoParallel(cores = num_cores)
 
 # Realizando a otimização
-grid_rf_result <- tune_grid(
-  rf_model,
-  receita,
-  resamples = cv_folds,
-  grid = rf_grid
-)
+#grid_rf_result <- tune_grid(
+  #rf_model,
+  #receita,
+  #resamples = cv_folds
+#)
 
 # Finalizando a paralelização após a conclusão da tarefa
-stopImplicitCluster()
+#stopImplicitCluster()
 ```
 
 ```{r Visualizando os resultados do grid}
 # Visualize os resultados
-grid_rf_result %>%
-  collect_metrics() %>%
-  filter(.metric == "rmse") %>%
-  arrange(mean) 
+#grid_rf_result %>%
+  #collect_metrics() %>%
+  #filter(.metric == "rmse") %>%
+  #arrange(mean) 
 ```
 
 Com as combinações cálculadas, retreinamos o modelo com esses hiperparametros.
 
 ```{r}
 # Melhor combinação 
-rf_best_hip <- select_best(grid_rf_result, "rmse")
+#rf_best_hip <- select_best(grid_rf_result, "rmse")
+
+# Salvando hiperparametros otimizados em um arquivo CSV
+#write_csv(rf_best_hip, "data/rf_best_hip.csv")
+
+#rf_best_hip
+```
+
+**OBS :Como o tempo de processamento é elevado para o modelo de Floresta Aleatória, os hiperparamentros otimizados serão salvos em um arquivo csv para não ser preciso rodar todas as interações novamente**
+
+```{r}
+# Lendo arquivo CSV com hiperparametros otimizados
+rf_best_hip <- read.csv("data/rf_best_hip.csv")
 
 rf_best_hip
 ```
+
 
 ```{r Modelo Final}
 rf_model_final <- rf_model %>%
@@ -363,27 +393,27 @@ rf_model_final <- rf_model %>%
 Assim, será cálculado as predições para o conjunto de teste e a métrica de desempenho do modelo.
 ```{r}
 # Realizando a predição
-rf_model_predctions <- rf_model_final %>%
+rf_model_predictions <- rf_model_final %>%
   predict(new_data = conj_teste_baked) %>%
   mutate(observado = conj_teste_baked$price, modelo = "Floresta Aleatória")
 
 # Visualizando as primeiras 10 linhas
-head(rf_model_predctions, 10)
+rmarkdown::paged_table(rf_model_predictions)
 ```
 Cálculando métricas de desempenho.
 
 ```{r}
 # Cálculando erro quadrático médio
-eqm_rf <- (rmse(rf_model_predctions, observado, .pred)$.estimate)**2
+eqm_rf <- (rmse(rf_model_predictions, observado, .pred)$.estimate)**2
 
 # Cálculando erro percentual absoluto médio(MAPE)
-mape_rf <- mean(abs((rf_model_predctions$observado - rf_model_predctions$.pred)/rf_model_predctions$observado)*100)
+mape_rf <- mean(abs((rf_model_predictions$observado - rf_model_predictions$.pred)/rf_model_predictions$observado)*100)
 
 # Adicionando resultados para o df de comparação
 df_results[df_results$Modelo == "Floresta Aleatória", "EQM"] <- eqm_rf
 df_results[df_results$Modelo == "Floresta Aleatória", "MAPE"] <- mape_rf
 
-df_results
+rmarkdown::paged_table(df_results)
 ```
 
 Ao observar o resultado preditivo da floresta aleatória percebe-se uma melhora significativa.
@@ -409,11 +439,11 @@ Criando grade de hiperparametros
 
 ```{r}
 # Definindo a especificação dos parâmetros
-param_spec <- parameters(boosting_model)
+#param_spec <- parameters(boosting_model)
 
 # Criar a grade aleatória
-set.seed(39) # para reprodutibilidade
-random_grid <- grid_random(param_spec, size = 50) # cria 50 combinações aleatórias
+#set.seed(39) # para reprodutibilidade
+#random_grid <- grid_random(param_spec, size = 50) # cria 50 combinações aleatórias
 ```
 a grade de hiperparametros ajustada, podemos realizar a validação cruzada para encontrar a melhor combinação. Ressaltando que também utilizaremos a paralelização do código para obter um processamento mais rapido. 
 
@@ -431,7 +461,7 @@ a grade de hiperparametros ajustada, podemos realizar a validação cruzada para
   #boosting_model,
   #receita,
   #resamples = cv_folds,
-  #grid = random_grid)
+  #)
 
 # Finalizando a paralelização
 #stopImplicitCluster()
@@ -447,14 +477,15 @@ a grade de hiperparametros ajustada, podemos realizar a validação cruzada para
 
 #boosting_best_hip
 ```
-**OBS :Como o tempo de processamento é elevado para o modelo do XGboosting, os hiperparamentros otimizados serão salvos em um arquivo csv para não ser preciso rodar todas as interações novamente**
+**OBS:Como o tempo de processamento é elevado para o modelo do XGboosting, os hiperparamentros otimizados serão salvos em um arquivo csv para não ser preciso rodar todas as interações novamente**
 
 ```{r}
 # Lendo os hiperparametros otimizados
 boosting_best_hip <- read.csv("data/boosting_best_hip.csv")
 
 # Visualizando 
-boosting_best_hip
+rmarkdown::paged_table(boosting_best_hip)
+
 ```
 A partir dos hiperparametros otimizados, o modelo será retreinado.
 
@@ -471,26 +502,27 @@ Realizando as predições utilizando o conjunto de teste e calcular a métrica d
 
 ```{r Predições conjunto de teste}
 # Realizando a predição
-boosting_model_predctions <- boosting_model_final %>%
+boosting_model_predictions <- boosting_model_final %>%
   predict(new_data = conj_teste_baked) %>%
   mutate(observado = conj_teste_baked$price, modelo = "Gradient_Boosting")
 
 # Visualizando as primeiras 10 linhas
-head(boosting_model_predctions, 10)
+rmarkdown::paged_table(boosting_model_predictions)
 ```
 
 ```{r}
 # Cálculando erro quadrático médio
-eqm_boosting <- (rmse(boosting_model_predctions, observado, .pred)$.estimate)**2
+eqm_boosting <- (rmse(boosting_model_predictions, observado, .pred)$.estimate)**2
 
 # Cálculando erro percentual absoluto médio(MAPE)
-mape_boosting <- mean(abs((boosting_model_predctions$observado - boosting_model_predctions$.pred)/boosting_model_predctions$observado)*100)
+mape_boosting <- mean(abs((boosting_model_predictions$observado - boosting_model_predictions$.pred)/boosting_model_predictions$observado)*100)
 
 # Adicionando resultados para o df de comparação
 df_results[df_results$Modelo == "Gradient Boosted", "EQM"] <- eqm_boosting
 df_results[df_results$Modelo == "Gradient Boosted", "MAPE"] <- mape_boosting
 
-df_results
+rmarkdown::paged_table(df_results)
+
 ```
 
 
@@ -499,7 +531,7 @@ df_results
 Com as métricas de desempenho cálculadas para os quatro modelos, chegamos na seguinte tabela de erro:
 
 ```{r}
-df_results
+rmarkdown::paged_table(df_results)
 ```
 
 Para entender como o erro se comporta em cada modelo, iremos analisar as distribuições percentuais.
@@ -507,35 +539,35 @@ Para entender como o erro se comporta em cada modelo, iremos analisar as distrib
 ```{r, fig.width=10, fig.height=6}
 # Cálculando o erro percentual para cada observação
 # Linear
-linear_model_predctions$mpe <- ((linear_model_predctions$observado - linear_model_predctions$.pred)/linear_model_predctions$observado)*100
+linear_model_predictions$mpe <- ((linear_model_predictions$observado - linear_model_predictions$.pred)/linear_model_predictions$observado)*100
 # Ridge
-ridge_model_predctions$mpe <- ((ridge_model_predctions$observado - ridge_model_predctions$.pred)/ridge_model_predctions$observado)*100
+ridge_model_predictions$mpe <- ((ridge_model_predictions$observado - ridge_model_predictions$.pred)/ridge_model_predictions$observado)*100
 # Floresta Aleatoria
-rf_model_predctions$mpe <- ((rf_model_predctions$observado - rf_model_predctions$.pred)/rf_model_predctions$observado)*100
+rf_model_predictions$mpe <- ((rf_model_predictions$observado - rf_model_predictions$.pred)/rf_model_predictions$observado)*100
 # Gradient Boosted
-boosting_model_predctions$mpe <- ((boosting_model_predctions$observado - boosting_model_predctions$.pred)/boosting_model_predctions$observado)*100
+boosting_model_predictions$mpe <- ((boosting_model_predictions$observado - boosting_model_predictions$.pred)/boosting_model_predictions$observado)*100
 
 # Cálculando média e desvio padrão
 # Linear
-linear_mpe_mean <- mean(linear_model_predctions$mpe)
-linear_mpe_desv <- sd(linear_model_predctions$mpe)
+linear_mpe_mean <- mean(linear_model_predictions$mpe)
+linear_mpe_desv <- sd(linear_model_predictions$mpe)
 # Ridge
-ridge_mpe_mean <- mean(ridge_model_predctions$mpe)
-ridge_mpe_desv <- sd(ridge_model_predctions$mpe)
+ridge_mpe_mean <- mean(ridge_model_predictions$mpe)
+ridge_mpe_desv <- sd(ridge_model_predictions$mpe)
 # Floresta Aleatória
-rf_mpe_mean <- mean(rf_model_predctions$mpe)
-rf_mpe_desv <- sd(rf_model_predctions$mpe)
+rf_mpe_mean <- mean(rf_model_predictions$mpe)
+rf_mpe_desv <- sd(rf_model_predictions$mpe)
 # Gradient Boosting
-boosting_mpe_mean <- mean(boosting_model_predctions$mpe)
-boosting_mpe_desv <- sd(boosting_model_predctions$mpe)
+boosting_mpe_mean <- mean(boosting_model_predictions$mpe)
+boosting_mpe_desv <- sd(boosting_model_predictions$mpe)
 
 # Plotando as distribuições
 # Histograma Modelo Linear
-linear_hist <- ggplot(linear_model_predctions, aes(x = mpe)) + 
-  geom_histogram(binwidth = 1, fill = "orange", alpha = 0.7) + 
-  geom_vline(xintercept = linear_mpe_mean, color = "blue", linetype = "dashed", linewidth = 1) +
-  geom_vline(xintercept = c(linear_mpe_mean - linear_mpe_desv, linear_mpe_mean + linear_mpe_desv), color = "red", linetype = "dashed", linewidth = 1) +
-  geom_text(x = linear_mpe_mean - linear_mpe_desv, y = 0, label = sprintf("SD=%.2f", linear_mpe_desv), color = "red", size = 3) +
+linear_hist <- ggplot(linear_model_predictions, aes(x = mpe)) + 
+  geom_histogram(binwidth = 1, fill = "#C1D6E5", alpha = 0.7) + 
+  geom_vline(xintercept = linear_mpe_mean, color = "#4979A9", linetype = "dashed", linewidth = 1) +
+  geom_vline(xintercept = c(linear_mpe_mean - linear_mpe_desv, linear_mpe_mean + linear_mpe_desv), color = "#D78463", linetype = "dashed", linewidth = 1) +
+  geom_text(x = linear_mpe_mean - linear_mpe_desv, y = 0, label = sprintf("SD=%.2f", linear_mpe_desv), color = "#D78463", size = 3) +
   theme_minimal() + 
   labs(
     title = "Linear",
@@ -544,11 +576,11 @@ linear_hist <- ggplot(linear_model_predctions, aes(x = mpe)) +
   )
 
 # Histograma Modelo Ridge
-ridge_hist <- ggplot(ridge_model_predctions, aes(x = mpe)) + 
-  geom_histogram(binwidth = 1, fill = "orange", alpha = 0.7) + 
-  geom_vline(xintercept = ridge_mpe_mean, color = "blue", linetype = "dashed", linewidth = 1) +
-  geom_vline(xintercept = c(ridge_mpe_mean - ridge_mpe_desv, ridge_mpe_mean + ridge_mpe_desv), color = "red", linetype = "dashed", linewidth = 1) +
-  geom_text(x = ridge_mpe_mean - ridge_mpe_desv, y = 0, label = sprintf("SD=%.2f", ridge_mpe_desv), color = "red", size = 3) +
+ridge_hist <- ggplot(ridge_model_predictions, aes(x = mpe)) + 
+  geom_histogram(binwidth = 1, fill = "#C1D6E5", alpha = 0.7) + 
+  geom_vline(xintercept = ridge_mpe_mean, color = "#4979A9", linetype = "dashed", linewidth = 1) +
+  geom_vline(xintercept = c(ridge_mpe_mean - ridge_mpe_desv, ridge_mpe_mean + ridge_mpe_desv), color = "#D78463", linetype = "dashed", linewidth = 1) +
+  geom_text(x = ridge_mpe_mean - ridge_mpe_desv, y = 0, label = sprintf("SD=%.2f", ridge_mpe_desv), color = "#D78463", size = 3) +
   theme_minimal() + 
   labs(
     title = "Ridge",
@@ -557,11 +589,11 @@ ridge_hist <- ggplot(ridge_model_predctions, aes(x = mpe)) +
   )
 
 # Histograma Modelo Floresta Aleatória
-rf_hist <- ggplot(rf_model_predctions, aes(x = mpe)) + 
-  geom_histogram(binwidth = 1, fill = "orange", alpha = 0.7) + 
-  geom_vline(xintercept = rf_mpe_mean, color = "blue", linetype = "dashed", linewidth = 1) +
-  geom_vline(xintercept = c(rf_mpe_mean - rf_mpe_desv, rf_mpe_mean + rf_mpe_desv), color = "red", linetype = "dashed", linewidth = 1) +
-  geom_text(x = rf_mpe_mean - rf_mpe_desv, y = 0, label = sprintf("SD=%.2f", rf_mpe_desv), color = "red", size = 3) +
+rf_hist <- ggplot(rf_model_predictions, aes(x = mpe)) + 
+  geom_histogram(binwidth = 1, fill = "#C1D6E5", alpha = 0.7) + 
+  geom_vline(xintercept = rf_mpe_mean, color = "#4979A9", linetype = "dashed", linewidth = 1) +
+  geom_vline(xintercept = c(rf_mpe_mean - rf_mpe_desv, rf_mpe_mean + rf_mpe_desv), color = "#D78463", linetype = "dashed", linewidth = 1) +
+  geom_text(x = rf_mpe_mean - rf_mpe_desv, y = 0, label = sprintf("SD=%.2f", rf_mpe_desv), color = "#D78463", size = 3) +
   theme_minimal() + 
   labs(
     title = "Floresta Aleatória",
@@ -570,11 +602,11 @@ rf_hist <- ggplot(rf_model_predctions, aes(x = mpe)) +
   )
 
 # Histograma Modelo Gradient Boosting
-boosting_hist <- ggplot(boosting_model_predctions, aes(x = mpe)) + 
-  geom_histogram(binwidth = 1, fill = "orange", alpha = 0.7) + 
-  geom_vline(xintercept = boosting_mpe_mean, color = "blue", linetype = "dashed", linewidth = 1) +
-  geom_vline(xintercept = c(boosting_mpe_mean - boosting_mpe_desv, boosting_mpe_mean + boosting_mpe_desv), color = "red", linetype = "dashed", linewidth = 1) +
-  geom_text(x = boosting_mpe_mean - boosting_mpe_desv, y = 0, label = sprintf("SD=%.2f", boosting_mpe_desv), color = "red", size = 3) +
+boosting_hist <- ggplot(boosting_model_predictions, aes(x = mpe)) + 
+  geom_histogram(binwidth = 1, fill = "#C1D6E5", alpha = 0.7) + 
+  geom_vline(xintercept = boosting_mpe_mean, color = "#4979A9", linetype = "dashed", linewidth = 1) +
+  geom_vline(xintercept = c(boosting_mpe_mean - boosting_mpe_desv, boosting_mpe_mean + boosting_mpe_desv), color = "#D78463", linetype = "dashed", linewidth = 1) +
+  geom_text(x = boosting_mpe_mean - boosting_mpe_desv, y = 0, label = sprintf("SD=%.2f", boosting_mpe_desv), color = "#D78463", size = 3) +
   theme_minimal() + 
   labs(
     title = "Gradient Boosting",
@@ -597,10 +629,10 @@ Como temos uma diferença de escala significativa no preço dos imóveis desta b
 
 ```{r, fig.width=10, fig.height=6}
 # Gráfico linear
-linear_plot1 <- ggplot(linear_model_predctions, aes(x=observado, y=mpe)) + 
+linear_plot1 <- ggplot(linear_model_predictions, aes(x=observado, y=mpe)) + 
   geom_point(aes(color = mpe)) + 
-  geom_hline(yintercept=0, linetype="dashed", color="red") + 
-  scale_color_gradient(low = "#FFA07A", high = "#FF6347") +  # Adicionado esta linha
+  geom_hline(yintercept=0, linetype="dashed", color="#D78463") + 
+  scale_color_gradient(low = "#C1D6E5", high = "#4979A9") +  # Adicionado esta linha
   theme_minimal() + 
   labs(
     title = "Linear",
@@ -610,10 +642,10 @@ linear_plot1 <- ggplot(linear_model_predctions, aes(x=observado, y=mpe)) +
   )
 
 # Gráfico Ridge
-ridge_plot1 <- ggplot(ridge_model_predctions, aes(x=observado, y=mpe)) + 
+ridge_plot1 <- ggplot(ridge_model_predictions, aes(x=observado, y=mpe)) + 
   geom_point(aes(color = mpe)) + 
-  geom_hline(yintercept=0, linetype="dashed", color="red") + 
-  scale_color_gradient(low = "#FFA07A", high = "#FF6347") +  # Adicionado esta linha
+  geom_hline(yintercept=0, linetype="dashed", color="#D78463") + 
+  scale_color_gradient(low = "#C1D6E5", high = "#4979A9") +  # Adicionado esta linha
   theme_minimal() + 
   labs(
     title = "Lasso",
@@ -623,10 +655,10 @@ ridge_plot1 <- ggplot(ridge_model_predctions, aes(x=observado, y=mpe)) +
   )
 
 # Random Forest
-rf_plot1 <- ggplot(rf_model_predctions, aes(x=observado, y=mpe)) + 
+rf_plot1 <- ggplot(rf_model_predictions, aes(x=observado, y=mpe)) + 
   geom_point(aes(color = mpe)) + 
-  geom_hline(yintercept=0, linetype="dashed", color="red") + 
-  scale_color_gradient(low = "#FFA07A", high = "#FF6347") +  # Adicionado esta linha
+  geom_hline(yintercept=0, linetype="dashed", color="#D78463") + 
+  scale_color_gradient(low = "#C1D6E5", high = "#4979A9") +  # Adicionado esta linha
   theme_minimal() + 
   labs(
     title = "Random Forest",
@@ -636,10 +668,10 @@ rf_plot1 <- ggplot(rf_model_predctions, aes(x=observado, y=mpe)) +
   )
 
 # Gradient Boosting
-boosting_plot1 <- ggplot(boosting_model_predctions, aes(x=observado, y=mpe)) + 
+boosting_plot1 <- ggplot(boosting_model_predictions, aes(x=observado, y=mpe)) + 
   geom_point(aes(color = mpe)) + 
-  geom_hline(yintercept=0, linetype="dashed", color="red") + 
-  scale_color_gradient(low = "#FFA07A", high = "#FF6347") +  # Adicionado esta linha
+  geom_hline(yintercept=0, linetype="dashed", color="#D78463") + 
+  scale_color_gradient(low = "#C1D6E5", high = "#4979A9") +  # Adicionado esta linha
   theme_minimal() + 
   labs(
     title = "Boosting",
@@ -657,6 +689,42 @@ print(combined_hist)
 
 Ao analisar o gráfico gerado, nota-se que todos os modelos apresentaram erros elevados em algumas observações de apartamentos com valores mais baixos. Além disso, o gráfico também demonstrou o que havia sido descrito anteriormente de que os modelos baseados em árvores conseguiram corrigir os erros percentuais das observações subestimadas. No entanto, esses modelos ainda enfrentaram problemas ao predizer de maneira superestimada o preço de algumas poucas observações.
 
+
+## Comparando modelos com e sem clusterização
+
+Para comparar o resultado utilizando a clusterização dos zipcodes com base na latitude, longitude e preço do metro quadrado, foi realizada a modelagem sem esta clusterização. Os resultados estão dispostos abaixo:
+
+```{r}
+# Lendo arquivo csv
+df_semcluster_results <- read.csv("data/df_semcluster_results.csv")
+
+# Visualização
+df_semcluster_results
+```
+
+Criando uma tabela de comparação percentual no ganho de predição ao não utilizar a clusterização:
+
+```{r}
+# Criando função do calculo percentual de EQM e MAPE
+comp_calc <- function(modelo, metrica) {
+  resultado <- ((df_results[df_results$Modelo == modelo, metrica] - df_semcluster_results[df_semcluster_results$Modelo == modelo, metrica])/df_results[df_results$Modelo == modelo, metrica])*100
+  return(resultado)
+}
+
+
+# Criando dataframe de comparação
+df_cluster_compare <- data.frame(
+    Modelo = c("Linear", "Ridge", "Floresta Aleatória", "Gradient Boosted"),
+    EQM_percent = c(comp_calc("Linear", "EQM"), comp_calc("Ridge", "EQM"), comp_calc('Floresta Aleatória', "EQM"), comp_calc("Gradient Boosted", "EQM")),
+    MAPE_percent = c(comp_calc("Linear", "MAPE"), comp_calc("Ridge", "MAPE"), comp_calc('Floresta Aleatória', "MAPE"), comp_calc("Gradient Boosted", "MAPE"))
+)
+  
+# Visualizando os resultados
+rmarkdown::paged_table(df_cluster_compare)
+
+```
+
+Observa-se uma melhoria percentual no erro para todos os modelos analisados. No caso do modelo de gradient boosting, em particular, verificou-se uma redução de 32% no erro quadrático médio e de 22% no erro percentual absoluto. Esses resultados indicam que a ausência da clusterização está associada a um ganho significativo no poder preditivo.
 
 
 

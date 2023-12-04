@@ -1,8 +1,0 @@
-Entrega I - Excel e Apresentação
-
-- Excel : Caio.
-- Gráficos e Rmarkdown : Murilo.
-- Revisar : Isabella.
-
-Entrega II - Projeto Final
-

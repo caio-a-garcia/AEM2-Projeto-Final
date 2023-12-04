@@ -1,0 +1,755 @@
+---
+output:
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE, warning = FALSE, message = FALSE)
+knitr::opts_knit$set(copy.extra = TRUE)
+knitr::opts_chunk$set(fig.show = "asis")
+paleta <- c("#4979A9","#D78463","#6190C3","#DF9C81","#98B7D4","#E8B6A2","#C1D6E5")
+```
+
+```{css, echo=FALSE}
+body {
+  background-color: #F5F5F5; 
+}
+```
+<br>
+
+[Etapa 2: Análise Exploratória]{style="color: #436F9B;font-size:36px;"}
+
+### Bibliotecas
+
+Importando as libraries:
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(stringi)
+library(factoextra)
+library(GGally)
+library(ggrepel)
+library(ggrepel)
+library(knitr)
+library(kableExtra)
+library(patchwork)
+library(gridExtra)
+library(corrplot)
+library(dplyr)
+library(grid)
+library(ggplot2)
+library(stringi)
+```
+
+### Leitura e exploração dos dados
+
+[Importação]{style="color: #436F9B;font-size:18px;font-weight:bold;"} 
+
+Lendo o dataset pré-processado:
+
+```{r}
+df <- read.csv("data/df_pre_processamento.csv")
+
+rmarkdown::paged_table(head(df))
+```
+
+[Transformações]{style="color: #436F9B;font-size:18px;font-weight:bold;"}
+
+Transformando as variáveis *grupo*, *waterfront* e *renovated* em fatores:
+
+```{r}
+df$grupo <- factor(df$grupo)
+df$waterfront <- factor(df$waterfront)
+df$renovated <- factor(df$renovated)
+df$categoria_quartos <- factor(df$categoria_quartos)
+```
+
+```{r, echo = FALSE, results = FALSE}
+str(df)
+```
+<br>
+[Estatísticas descritivas]{style="color: #436F9B;font-size:18px;font-weight:bold;"}
+
+Nessa etapa, optamos por criar um dataframe contendo as estatísticas descritivas selecionadas, em vez de utilizar a função *summary()*, para aprimorar a visualização das informações. Isso também nos permite obter o valor do desvio padrão, que não está incluído no conjunto de estatísticas geradas pela função *summary()*.
+
+[Obtendo as estatísticas descritivas de *Valor mínimo*, *Valor máximo*, *Média*, *Desvio Padrão* e *Número de valores distintos* do conjunto de dados:]{style="color: #436F9B"}
+
+```{r}
+#Função para calcular as estatísticas
+estatisticas <- function(variavel) {
+  minimo <- min(variavel, na.rm = TRUE)
+  maximo <- max(variavel, na.rm = TRUE)
+  media <- mean(variavel, na.rm = TRUE)
+  desvio_padrao <- sd(variavel, na.rm = TRUE)
+  distintos <- length(unique(variavel))
+  
+  return(c(Min = minimo, Max = maximo, Media = media, 'Desvio Padrao' = desvio_padrao, 'Valores Distintos' = distintos))}
+
+#Aplicando a função apenas em colunas numéricas
+estatisticas_df <- df %>%
+  select_if(is.numeric) %>%
+  summarise_all(estatisticas) %>% 
+  as.data.frame()
+
+estatisticas_df$descritiva <- c('Min','Max','Media','Desvio Padrao', 'Valores Distintos')
+
+#Reposicionando a coluna das estatisticas
+estatisticas_df <- estatisticas_df %>%
+                      relocate(descritiva)
+
+rmarkdown::paged_table(estatisticas_df)
+```
+No dataframe acima, observamos que as variáveis *price* e *sqft_living* são as que apresentam maior variabilidade, o que já era esperado dado que as demais variáveis apresentam dados em unidade. Com as estatísticas descritivas obtidas, também identificamos algumas particularidades de cada atributo que irão contribuir para as visualizações gráficas que serão geradas a seguir. As variáveis *bedrooms*, *bathrooms* e *age*, por exemplo, possuem um número elevado de valores distintos, gerando a necessidade da definição de faixas de análise.
+
+Quanto à variável *age*, destaca-se o valor mínimo de -1. Ao observarmos as datas de venda e de construção do imóvel, conclui-se que esse valor é justificado pela venda prévia à construção.
+
+<br>
+[Distribuição das variáveis]{style="color: #436F9B;font-size:18px;font-weight:bold;"}
+
+Gerando um dataframe somente com as variáveis numéricas para essa e as próximas análises:
+
+```{r}
+df_numeric <- df %>% 
+  select_if(is.numeric)
+```
+
+[Código do gráfico]{style="color: #436F9B"}
+
+```{r fig.width=16, fig.height=8}
+#Lista para armazenar os gráficos
+plot_list <- list()
+
+#Loop para criar os gráficos
+for (col in colnames(df_numeric)) {
+  plot <- ggplot(data = df_numeric, aes(x = !!as.name(col))) +
+    geom_histogram(fill = "#436F9B", color = "white") +
+    labs(title = col)+
+    theme_minimal()
+  plot_list[[col]] <- plot}
+
+#Combinando os gráficos 
+grid.arrange(grobs = plot_list, ncol = 5, top = textGrob("Distribuição das Variáveis Numéricas", gp = gpar(fontsize = 18, fontface = "bold")))
+```
+
+<br>
+[Correlação entre variáveis]{style="color: #436F9B;font-size:18px;font-weight:bold;"}
+
+Gerando a matriz de correlações:
+
+```{r fig.width=8.5, fig.height =8}
+#Calculando correlações
+corr_matrix <- cor(df_numeric)
+
+#Plotando a matriz
+corrplot(corr_matrix, method = "color", tl.col = "black")
+```
+
+Na matriz acima, identficamos que as maiores correlações positivas são entre as variáveis *price* e *sqft_living*, *price* e *grade*, *bathrooms* e *sqft_living* e *sqft_living* e *grade*, estando de acordo com o esperado. Quanto às maiores correlações negativas, se destacam *age* e *bathrooms*, *floors* e *age* e *grade* e *age*, as quais contribuem mais para o entendimento das características desse conjunto de imóveis em específico.
+
+<br>
+[Análise de atributos dos imóveis]{style="color: #436F9B;font-size:20px;font-weight:bold;"}
+
+Abaixo, serão gerados gráficos de coluna empilhada de base 100 para analisarmos as características dos imóveis segundo o agrupamento realizado na etapa de pré-processamento, que leva em conta as informações de localização e preço por sqft. O intuito dessa visualização é identificarmos a proporção de cada atributo dentro dos 4 grupos existentes. Além disso, será avaliado o preço médio por cada categoria dos atributos.
+
+**Informações sobre imóveis com e sem vista para o mar:**
+
+- 0: sem vista
+- 1: com vista
+
+```{r}
+#GRÁFICO DE COLUNAS EMPILHADAS - VISUALIZAÇÃO POR GRUPO
+#Agrupando as informações para obtermos o % de cada valor 0 e 1
+waterfront_tx <- df %>%
+  group_by(grupo, waterfront) %>%
+  summarise(count = n()) %>%
+  group_by(grupo) %>%
+  mutate(proporcao = count / sum(count))
+
+#Gerando o plot da coluna empilhada de base 100 com rótulos
+plotW1 <- ggplot(waterfront_tx, aes(x = grupo, y = proporcao, fill = as.factor(waterfront))) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = scales::percent(proporcao, accuracy = 0.1)), position = position_fill(vjust =   0.5), size = 5) +
+  labs(title = "Percentual de imóveis com vista para o mar por grupo",
+       x = "Grupo",
+       y = NULL)+
+  guides(fill = FALSE)+
+  scale_fill_manual(values = paleta)+
+    theme_minimal()
+
+#GRÁFICO DO PREÇO MÉDIO POR CATEGORIA DE WATERFRONT
+#Calcular a média do preço para cada categoria
+media_priceW <- df %>%
+  group_by(waterfront) %>%
+  summarise(preco_medio = mean(price, na.rm = TRUE))
+
+#Criando o gráfico de barras horizontais
+plotW2 <- ggplot(media_priceW, aes(x = preco_medio, y = waterfront, fill = waterfront)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = scales::dollar(preco_medio)), hjust = 1.1, size = 5) +  
+  labs(title = "Preço médio por imóvel com/sem vista para o mar",
+       x = "Preço médio",
+       y = "Vista para o mar",
+       fill = "Waterfront")+
+  scale_fill_manual(values = paleta)+
+    theme_minimal()
+```
+
+```{r, fig.width=14, fig.height = 6}
+#Unindo os gráficos sobre vista para o mar
+grid.arrange(plotW1, plotW2,
+            ncol = 2,
+            top = textGrob("Vista para o Mar", gp = gpar(fontsize = 16, fontface = "bold")))
+```
+
+No primeiro gráfico, é possível identificar que o grupo B é o que mais possui imóveis com vista para o mar, o que está de acordo com a visualização em mapa do agrupamento, visto que esse grupo tem maior área de praia. Como também é de se esperar, esses imóveis têm o preço médio mais elevado.
+
+<br>
+**Informações sobre imóveis renovados e não renovados:**
+
+- 0: não renovados
+- 1: renovados
+
+```{r}
+#GRÁFICO DE COLUNAS EMPILHADAS - VISUALIZAÇÃO POR GRUPO
+#Agrupando as informações para obtermos o % de cada valor 0 e 1
+renovated_tx <- df %>%
+  group_by(grupo, renovated) %>%
+  summarise(count = n()) %>%
+  group_by(grupo) %>%
+  mutate(proporcao = count / sum(count))
+
+#Gerando o plot da coluna empilhada de base 100 com rótulos
+plotR1 <- ggplot(renovated_tx, aes(x = grupo, y = proporcao, fill = as.factor(renovated))) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = scales::percent(proporcao, accuracy = 0.1)), position = position_fill(vjust =   0.5), size = 5) +
+  labs(title = "Percentual de imóveis renovados por grupo",
+       x = "Grupo",
+       y = NULL)+
+  guides(fill = FALSE)+
+  scale_fill_manual(values = paleta)+
+    theme_minimal()
+
+#GRÁFICO DO PREÇO MÉDIO POR CATEGORIA DE RENOVATED
+#Calcular a média do preço para cada categoria
+media_pricer <- df %>%
+  group_by(renovated) %>%
+  summarise(preco_medio = mean(price, na.rm = TRUE))
+
+#Criando o gráfico de barras horizontais
+plotR2 <- ggplot(media_pricer, aes(x = preco_medio, y = renovated, fill = renovated)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = scales::dollar(preco_medio)), hjust = 1.1, size = 5) +  
+  labs(title = "Preço médio por imóvel renovado e não renovado",
+       x = "Preço médio",
+       y = "Renovado",
+       fill = "Renovated")+
+  scale_fill_manual(values = paleta)+
+    theme_minimal()
+```
+
+```{r fig.width=14, fig.height = 6}
+#Unindo os gráficos sobre renovação de imóveis
+grid.arrange(plotR1, plotR2,
+            ncol = 2,
+            top = textGrob("Renovação de Imóveis", gp = gpar(fontsize = 16, fontface = "bold")))
+```
+
+Nos gráficos acima, verificamos que o grupo A é que possui maior percentual de imóveis renovados, o que também está em linha com o esperado, visto que é o grupo com maior preço por ft quadrado.
+
+<br>
+**Informações sobre número de quartos:**
+
+Para facilitar a visualização, optamos por agrupar numa única categoria imóveis com mais de 5 quartos no primeiro gráfico, visto que o número máximo dessa variável é de 33 quartos. 
+
+```{r}
+#GRÁFICO DE COLUNAS EMPILHADAS - VISUALIZAÇÃO POR GRUPO
+
+#Calculando a proporção de imóveis por grupo e categoria de quartos
+bedrooms_tx <- df %>%
+  group_by(grupo, categoria_quartos) %>%
+  summarise(count = n()) %>%
+  group_by(grupo) %>%
+  mutate(proporcao = count / sum(count))
+
+#Coluna para indicar se o rótulo deve ser exibido (ocultando para uma visualização mais limpa)
+bedrooms_tx$exibir_rotulo <- bedrooms_tx$proporcao >= 0.02
+
+#Criando o gráfico de colunas empilhadas base 100 com rótulos de percentual (1 casa decimal)
+plotbd1 <- ggplot(bedrooms_tx, aes(x = grupo, y = proporcao, fill = categoria_quartos)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = ifelse(exibir_rotulo, scales::percent(proporcao, accuracy = 0.1), "")),
+            position = position_fill(vjust = 0.5), size = 5) +
+  labs(title = "Percentual de imóveis com n quartos por grupo",
+       x = "Grupo",
+       y = NULL,
+       fill = "Nº de quartos")+
+  guides(fill = FALSE)+
+  scale_fill_manual(values = paleta)+
+    theme_minimal()
+
+#GRÁFICO DO PREÇO MÉDIO POR CATEGORIA DE NÚMERO DE QUARTOS
+#Calcular a média do preço para cada categoria de quartos
+media_preco_bedrooms <- df %>%
+  group_by(categoria_quartos) %>%
+  summarise(preco_medio = mean(price))%>%
+  mutate(categoria_quartos = factor(categoria_quartos, levels = categoria_quartos))
+
+#Criando o gráfico de barras horizontais
+plotbd2 <- ggplot(media_preco_bedrooms, aes(x = preco_medio, y = categoria_quartos, fill = categoria_quartos)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = scales::dollar(preco_medio)), hjust = 1.1, size = 5) +
+  labs(title = "Preço médio por número de quartos",
+       x = "Preço médio",
+       y = "Nº de quartos",
+       fill = "Nº de quartos")+
+  scale_fill_manual(values = paleta)+
+    theme_minimal()
+```
+
+```{r fig.width=16, fig.height = 6.5}
+#Unindo os gráficos sobre número de quartos
+grid.arrange(plotbd1, plotbd2,
+            ncol = 2,
+            top = textGrob("Número de Quartos por Imóvel", gp = gpar(fontsize = 16, fontface = "bold")))
+```
+
+Os gráficos acima demonstram que a maior parte dos imóveis possui 4 ou 5 quartos e, conforme esperado, o preço aumenta com o incremento de quartos. Quanto à divisão por grupos, o grupo A é o que possui maior percentual de imóveis com 3 quartos, se distanciando nessa categoria dos demais.
+
+<br>
+**Informações sobre número de andares:**
+
+```{r}
+#GRÁFICO DE COLUNAS EMPILHADAS - VISUALIZAÇÃO POR GRUPO
+#Calculando a proporção de imóveis por grupo e número de andares
+floors_tx <- df %>%
+  group_by(grupo, floors) %>%
+  summarise(count = n()) %>%
+  group_by(grupo) %>%
+  mutate(proporcao = count / sum(count))
+
+#Coluna para indicar se o rótulo deve ser exibido (ocultando para uma visualização mais limpa)
+floors_tx$exibir_rotulo <- floors_tx$proporcao >= 0.01
+
+#Criando o gráfico de colunas empilhadas base 100 com rótulos de percentual (1 casa decimal)
+plotf1 <- ggplot(floors_tx, aes(x = grupo, y = proporcao, fill = as.factor(floors))) +
+  geom_bar(stat = "identity") +
+   geom_text(aes(label = ifelse(exibir_rotulo, scales::percent(proporcao, accuracy = 0.1), "")),
+            position = position_fill(vjust = 0.5), size = 5) +
+  labs(title = "% de imóveis com n andares por grupo",
+       x = "Grupo",
+       y = NULL)+
+  guides(fill = FALSE)+
+  scale_fill_manual(values = paleta)+
+    theme_minimal()
+
+#GRÁFICO DO PREÇO MÉDIO POR NÚMERO DE ANDARES
+#Calcular a média do preço para cada número de andares
+media_preco_floors <- df %>%
+  group_by(floors) %>%
+  summarise(preco_medio = mean(price))%>%
+  mutate(floors = factor(floors, levels = floors))
+
+#Criar o gráfico de barras horizontais
+plotf2 <- ggplot(media_preco_floors, aes(x = preco_medio, y = floors, fill = floors)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = scales::dollar(preco_medio)), hjust = 1.1, size = 5) +
+  labs(title = "Preço médio por número de andares",
+       x = "Preço médio",
+       y = "Nº de andares",
+       fill = "Nº de andares")+
+  scale_fill_manual(values = paleta)+
+    theme_minimal()
+```
+
+```{r fig.width=16, fig.height = 6.5}
+#Unindo os gráficos sobre número de andares
+grid.arrange(plotf1, plotf2,
+            ncol = 2,
+            top = textGrob("Número de Andares por Imóvel", gp = gpar(fontsize = 16, fontface = "bold")))
+```
+
+Os gráficos acima evidenciam que a maior parte dos imóveis possui 1 ou 3 andares. Isso pode nos informar que existem muitos apartamentos no dataset. 
+
+<br>
+**Informações sobre número de banheiros:**
+
+Quanto ao número de banheiros, foi necessária a criação de faixas dado que existem valores decimais para essa variável. Isso ocorre devido à existência de banheiros sociais, banheiros somente com chuveiro, banheiros com chuveiro e banheira, e etc. Nessa divisão, criamos uma categoria única para imóveis com número de banheiros acima de 4, sendo o máximo igual a 8.
+
+```{r}
+#GRÁFICO DE COLUNAS EMPILHADAS - VISUALIZAÇÃO POR GRUPO
+#Criando uma variável que indica a faixa de número de banheiros
+df$faixa_banheiros <- cut(df$bathrooms, 
+                      breaks = c(-Inf, 1, 2, 3, 4, Inf), 
+                      labels = c("até 1", "1 - 2", "2 - 3", "3 - 4", "> 4"),
+                      include.lowest = TRUE)
+
+#Calculando a proporção de imóveis por grupo e faixa de número de banheiros
+banheiros_tx <- df %>%
+  group_by(grupo, faixa_banheiros) %>%
+  summarise(count = n()) %>%
+  group_by(grupo) %>%
+  mutate(proporcao = count / sum(count))
+
+#Coluna para indicar se o rótulo deve ser exibido (ocultando para uma visualização mais limpa)
+banheiros_tx$exibir_rotulo <- banheiros_tx$proporcao >= 0.01
+
+#Criando o gráfico de colunas empilhadas base 100 com rótulos de percentual (1 casa decimal)
+plotbt1 <- ggplot(banheiros_tx, aes(x = grupo, y = proporcao, fill = as.factor(faixa_banheiros))) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = ifelse(exibir_rotulo, scales::percent(proporcao, accuracy = 0.1), "")),
+            position = position_fill(vjust = 0.5), size = 5) +
+  labs(title = "Percentual de imóveis por faixa de nº de banheiros por grupo",
+       x = "Grupo",
+       y = NULL)+
+  guides(fill = FALSE)+
+  scale_fill_manual(values = paleta)+
+    theme_minimal()
+
+#GRÁFICO DO PREÇO MÉDIO POR FAIXA DE Nº DE BANHEIROS
+#Calcular a média do preço para cada faixa de nº de banheiros
+media_preco_bathrooms <- df %>%
+  group_by(faixa_banheiros) %>%
+  summarise(preco_medio = mean(price, na.rm = TRUE))%>%
+  mutate(faixa_banheiros = factor(faixa_banheiros, levels = faixa_banheiros))
+
+#Criar o gráfico de barras horizontais
+plotbt2 <- ggplot(media_preco_bathrooms, aes(x = preco_medio, y = faixa_banheiros, fill = faixa_banheiros)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = scales::dollar(preco_medio)), hjust = 1.1, size = 5) +
+  labs(title = "Preço médio por faixa de nº de banheiros",
+       x = "Preço médio",
+       y = "Nº de banheiros",
+       fill = "Nº de banheiros")+
+  scale_fill_manual(values = paleta)+
+    theme_minimal()
+```
+
+```{r fig.width=16, fig.height = 6.5}
+#Unindo os gráficos sobre número de banheiros
+grid.arrange(plotbt1, plotbt2,
+            ncol = 2,
+            top = textGrob("Número de Banheiros por Imóvel", gp = gpar(fontsize = 16, fontface = "bold")))
+```
+
+Os gráficos acima demonstram que a maior parte dos imóveis possui de 2 a 3 banheiros e, conforme esperado, o preço aumenta com o incremento de banheiros.
+
+<br>
+**Informações sobre idade dos imóveis:**
+
+As faixas de idades dos imóveis foram decididas com base na distribuição da variável *age*. A divisão que tornou o gráfico mais bem distribuído foi com a faixa inicial até 10 anos e as faixas seguintes de 20 em 20 anos, sendo a última acima de 60 anos.
+
+```{r}
+#GRÁFICO DE COLUNAS EMPILHADAS - VISUALIZAÇÃO POR GRUPO
+#Criar uma variável que indica a faixa de idade do imóvel
+df$faixa_idade <- cut(df$age, 
+                      breaks = c(-Inf, 10, 20, 40, 60,Inf), 
+                      labels = c("< 10", "10 - 20", "20 - 40", "40 - 60", "> 60"),
+                      include.lowest = TRUE)
+
+#Calcular a proporção de imóveis por grupo e faixa de idade do imóvel
+idade_tx <- df %>%
+  group_by(grupo, faixa_idade) %>%
+  summarise(count = n()) %>%
+  group_by(grupo) %>%
+  mutate(proporcao = count / sum(count))
+
+#Adicionar uma coluna para indicar se o rótulo deve ser exibido
+idade_tx$exibir_rotulo <- idade_tx$proporcao >= 0.00
+
+#Criar o gráfico de colunas empilhadas base 100 com rótulos de percentual (1 casa decimal)
+plota1 <- ggplot(idade_tx, aes(x = grupo, y = proporcao, fill = faixa_idade)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = ifelse(exibir_rotulo, scales::percent(proporcao, accuracy = 0.1), "")),
+            position = position_fill(vjust = 0.5), size = 5) +  
+  labs(title = "Percentual de imóveis por faixa de idade por grupo",
+       x = "Grupo",
+       y = NULL)+
+  guides(fill = FALSE)+
+  scale_fill_manual(values = paleta)+
+    theme_minimal()
+
+#GRÁFICO DO PREÇO MÉDIO POR FAIXA DE IDADE
+#Calcular a média do preço para cada faixa de idade
+media_preco_age <- df %>%
+  group_by(faixa_idade) %>%
+  summarise(preco_medio = mean(price, na.rm = TRUE))%>%
+  mutate(faixa_idade = factor(faixa_idade, levels = faixa_idade))
+
+#Criar o gráfico de barras horizontais
+plota2 <- ggplot(media_preco_age, aes(x = preco_medio, y = faixa_idade, fill = faixa_idade)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = scales::dollar(preco_medio)), hjust = 1.1, size = 5) +
+  labs(title = "Preço médio por faixa de idade do imóvel",
+       x = "Preço médio",
+       y = "Faixa de idade",
+       fill = "Idade (anos)")+
+  scale_fill_manual(values = paleta)+
+    theme_minimal()
+```
+
+```{r fig.width=16, fig.height = 6.5}
+#Unindo os gráficos sobre idade dos imóveis
+grid.arrange(plota1, plota2,
+            ncol = 2,
+            top = textGrob("Idades dos Imóveis", gp = gpar(fontsize = 16, fontface = "bold")))
+```
+
+O primeiro gráfico evidencia que o grupo A é que mais se difere em relação à distribuição de idades entre os grupos, contendo, em sua maior parte, imóveis com menos de 10 anos. O agrupamento por idades não gerou um impacto tão significativo na variação da média de preços, especialmente em imóveis a partir de 20 anos. 
+
+<br>
+**Informações sobre a área habitável dos imóveis:**
+
+Da mesma forma que na variável *age*, as faixas de área habitável dos imóveis foram decididas com base na distribuição da variável *sqft_living*. A divisão que tornou o gráfico mais bem distribuído foi de 1000 em 1000 sqft, sendo a última acima de 4000 sqft.
+
+```{r}
+#GRÁFICO DE COLUNAS EMPILHADAS - VISUALIZAÇÃO POR GRUPO
+#Criar uma variável que indica a faixa de idade do imóvel
+df$faixa_area <- cut(df$sqft_living, 
+                      breaks = c(-Inf, 1000, 2000, 3000, 4000, Inf), 
+                      labels = c("< 1000", "1000 - 2000", "2000 - 3000", "3000 - 4000", "> 4000"),
+                      include.lowest = TRUE)
+
+#Calcular a proporção de imóveis por grupo e faixa de idade do imóvel
+area_tx <- df %>%
+  group_by(grupo, faixa_area) %>%
+  summarise(count = n()) %>%
+  group_by(grupo) %>%
+  mutate(proporcao = count / sum(count))
+
+#Adicionar uma coluna para indicar se o rótulo deve ser exibido
+area_tx$exibir_rotulo <- area_tx$proporcao >= 0.02
+
+#Criar o gráfico de colunas empilhadas base 100 com rótulos de percentual (1 casa decimal)
+plotsq1 <- ggplot(area_tx, aes(x = grupo, y = proporcao, fill = faixa_area)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = ifelse(exibir_rotulo, scales::percent(proporcao, accuracy = 0.1), "")),
+            position = position_fill(vjust = 0.5), size = 5) +  
+  labs(title = "Percentual de imóveis por faixa de área hábitavel por grupo",
+       x = "Grupo",
+       y = NULL)+
+  scale_fill_manual(values = paleta)+
+  guides(fill = FALSE)+
+    theme_minimal()
+  
+
+#GRÁFICO DO PREÇO MÉDIO POR FAIXA DE ÁREA HABITÁVEL
+#Calcular a média do preço para cada faixa de idade
+media_preco_sqft <- df %>%
+  group_by(faixa_area) %>%
+  summarise(preco_medio = mean(price, na.rm = TRUE))%>%
+  mutate(faixa_area = factor(faixa_area, levels = faixa_area))
+
+#Criar o gráfico de barras horizontais
+plotsq2 <- ggplot(media_preco_sqft, aes(x = preco_medio, y = faixa_area, fill = faixa_area)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = scales::dollar(preco_medio)), hjust = 1.1, size = 5) +
+  labs(title = "Preço médio por faixa de área habitável no imóvel",
+       x = "Preço médio",
+       y = "Faixa de área habitável",
+       fill = "Área habitável (sqft)")+
+  scale_fill_manual(values = paleta)+
+    theme_minimal()
+```
+
+```{r fig.width=16, fig.height = 6.5}
+#Unindo os gráficos sobre área habitável dos imóveis
+grid.arrange(plotsq1, plotsq2,
+            ncol = 2,
+            top = textGrob("Área Habitável dos Imóveis", gp = gpar(fontsize = 16, fontface = "bold")))
+```
+
+Com os gráficos acima, podemos concluir que a amostra contém imóveis relativamente grandes, sendo que a faixa mais frequente é entre 92 m² e 185 m² (1000 - 2000 sqft), seguida pela faixa entre 185 m² e 278 m² (2000 - 3000 sqft).
+
+<br>
+**Informações sobre a condição dos imóveis:**
+
+
+```{r}
+#GRÁFICO DE COLUNAS EMPILHADAS - VISUALIZAÇÃO POR GRUPO
+#Calculando a proporção de imóveis por grupo e condição
+cond_tx <- df %>%
+  group_by(grupo, condition) %>%
+  summarise(count = n()) %>%
+  group_by(grupo) %>%
+  mutate(proporcao = count / sum(count))
+
+#Coluna para indicar se o rótulo deve ser exibido (ocultando para uma visualização mais limpa)
+cond_tx$exibir_rotulo <- cond_tx$proporcao >= 0.01
+
+#Criando o gráfico de colunas empilhadas base 100 com rótulos de percentual (1 casa decimal)
+plotcd1 <- ggplot(cond_tx, aes(x = grupo, y = proporcao, fill = as.factor(condition))) +
+  geom_bar(stat = "identity") +
+   geom_text(aes(label = ifelse(exibir_rotulo, scales::percent(proporcao, accuracy = 0.1), "")),
+            position = position_fill(vjust = 0.5), size = 5) +
+  labs(title = "Percentual de imóveis por nota de condição grupo",
+       x = "Grupo",
+       y = NULL)+
+  guides(fill = FALSE)+
+  scale_fill_manual(values = paleta)+
+    theme_minimal()
+
+#GRÁFICO DO PREÇO MÉDIO POR NÚMERO DE ANDARES
+#Calcular a média do preço para cada nota de condição
+media_preco_cond <- df %>%
+  group_by(condition) %>%
+  summarise(preco_medio = mean(price))%>%
+  mutate(condition = factor(condition, levels = condition))
+
+#Criar o gráfico de barras horizontais
+plotcd2 <- ggplot(media_preco_cond, aes(x = preco_medio, y = condition, fill = condition)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = scales::dollar(preco_medio)), hjust = 1.1, size = 5) +
+  labs(title = "Preço médio por nota de condição dos imóveis",
+       x = "Preço médio",
+       y = "Nota de condição",
+       fill = "Nota de condição")+
+  scale_fill_manual(values = paleta)+
+    theme_minimal()
+```
+
+```{r fig.width=16, fig.height = 6.5}
+#Unindo os gráficos sobre condição
+grid.arrange(plotcd1, plotcd2,
+            ncol = 2,
+            top = textGrob("Condição dos Imóveis", gp = gpar(fontsize = 16, fontface = "bold")))
+```
+
+No gráfico acima, é possível notas que a maior parte dos imóveis possuem nota 4 para sua condição, e o grupo A foi o que apresentou maior percentual de imóveis com nota 5.
+
+
+<br>
+**Informações sobre a nota geral dos imóveis:**
+
+As faixas de nota dos imóveis foram decididas com base na distribuição da variável *grade*. A divisão que tornou o gráfico mais bem distribuído foi de 2 em 2 sqft, sendo a última acima de 10 (nas estatísticas descritivas, verificou-se que o vaor máximo é 13).
+
+```{r}
+#GRÁFICO DE COLUNAS EMPILHADAS - VISUALIZAÇÃO POR GRUPO
+#Criar uma variável que indica a faixa de idade do imóvel
+df$faixa_grade <- cut(df$grade, 
+                      breaks = c(-Inf, 2, 4, 6, 8, 10, Inf), 
+                      labels = c("< 2", "2 - 4", "4 - 6", "6 - 8", "8 - 10", "> 10"),
+                      include.lowest = TRUE)
+
+#Calculando a proporção de imóveis por grupo e categoria de nota
+grade_tx <- df %>%
+  group_by(grupo, faixa_grade) %>%
+  summarise(count = n()) %>%
+  group_by(grupo) %>%
+  mutate(proporcao = count / sum(count))
+
+#Coluna para indicar se o rótulo deve ser exibido (ocultando para uma visualização mais limpa)
+grade_tx$exibir_rotulo <- grade_tx$proporcao >= 0.02
+
+#Criando o gráfico de colunas empilhadas base 100 com rótulos de percentual (1 casa decimal)
+plotgd1 <- ggplot(grade_tx, aes(x = grupo, y = proporcao, fill = faixa_grade)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = ifelse(exibir_rotulo, scales::percent(proporcao, accuracy = 0.1), "")),
+            position = position_fill(vjust = 0.5), size = 5) +
+  labs(title = "Percentual de imóveis por nota geral",
+       x = "Grupo",
+       y = NULL,
+       fill = "Nota geral")+
+  guides(fill = FALSE)+
+  scale_fill_manual(values = paleta)+
+    theme_minimal()
+
+#GRÁFICO DO PREÇO MÉDIO POR CATEGORIA DE NOTA
+#Calcular a média do preço para cada categoria de nota
+media_preco_grade <- df %>%
+  group_by(faixa_grade) %>%
+  summarise(preco_medio = mean(price)) %>%
+  mutate(faixa_grade = factor(faixa_grade, levels = faixa_grade))
+
+#Criando o gráfico de barras horizontais
+plotgd2 <- ggplot(media_preco_grade, aes(x = preco_medio, y = faixa_grade, fill = faixa_grade)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = scales::dollar(preco_medio)), hjust = 1.1, size = 5) +
+  labs(title = "Preço médio por nota geral",
+       x = "Preço médio",
+       y = "Nota geral",
+       fill = "Nota geral")+
+  scale_fill_manual(values = paleta)+
+    theme_minimal()
+```
+
+```{r fig.width=16, fig.height = 6.5}
+#Unindo os gráficos sobre nota geral
+grid.arrange(plotgd1, plotgd2,
+            ncol = 2,
+            top = textGrob("Nota Geral dos Imóveis", gp = gpar(fontsize = 16, fontface = "bold")))
+```
+
+Nos gráficos acima, observamos que a maior parte dos imóveis receberam notas entre 6 e 8, sendo o grupo que possui mais percentual de notas acima de 8 o B.
+
+<br>
+**Informações sobre o % da área habitábel que é porão:**
+
+As faixas de nota dos imóveis foram decididas com base na distribuição da variável *grade*. A divisão que tornou o gráfico mais bem distribuído foi de 2 em 2 sqft, sendo a última acima de 10 (nas estatísticas descritivas, verificou-se que o vaor máximo é 13).
+
+```{r}
+#GRÁFICO DE COLUNAS EMPILHADAS - VISUALIZAÇÃO POR GRUPO
+#Criar uma variável que indica a faixa de % de porão
+df$faixa_bsmt <- cut(df$basement_percent, 
+                      breaks = c(-Inf, 0.1, 0.3, 0.6, Inf), 
+                      labels = c("< 10%", "10% - 30%", "30% - 60%", "> 60%"),
+                      include.lowest = TRUE)
+
+#Calculando a proporção de imóveis por grupo e faixa de % de porão
+bsmt_tx <- df %>%
+  group_by(grupo, faixa_bsmt) %>%
+  summarise(count = n()) %>%
+  group_by(grupo) %>%
+  mutate(proporcao = count / sum(count))
+
+#Coluna para indicar se o rótulo deve ser exibido (ocultando para uma visualização mais limpa)
+bsmt_tx$exibir_rotulo <- bsmt_tx$proporcao >= 0.02
+
+#Criando o gráfico de colunas empilhadas base 100 com rótulos de percentual (1 casa decimal)
+plotbm1 <- ggplot(bsmt_tx, aes(x = grupo, y = proporcao, fill = faixa_bsmt)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = ifelse(exibir_rotulo, scales::percent(proporcao, accuracy = 0.1), "")),
+            position = position_fill(vjust = 0.5), size = 5) +
+  labs(title = "Percentual de imóveis por % de porão",
+       x = "Grupo",
+       y = NULL,
+       fill = "% de porão")+
+  guides(fill = FALSE)+
+  scale_fill_manual(values = paleta)+
+    theme_minimal()
+
+#GRÁFICO DO PREÇO MÉDIO POR % DE PORÃO
+#Calcular a média do preço para cada faixa de % de porão
+media_preco_bsmt <- df %>%
+  group_by(faixa_bsmt) %>%
+  summarise(preco_medio = mean(price))%>%
+  mutate(faixa_bsmt = factor(faixa_bsmt, levels = faixa_bsmt))
+
+#Criando o gráfico de barras horizontais
+plotbm2 <- ggplot(media_preco_bsmt, aes(x = preco_medio, y = faixa_bsmt, fill = faixa_bsmt)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = scales::dollar(preco_medio)), hjust = 1.1, size = 5) +
+  labs(title = "Preço médio por % de porão",
+       x = "Preço médio",
+       y = "% de porão",
+       fill = "% de porão")+
+  scale_fill_manual(values = paleta)+
+    theme_minimal()
+```
+
+```{r fig.width=16, fig.height = 6.5}
+#Unindo os gráficos sobre % de porão
+grid.arrange(plotbm1, plotbm2,
+            ncol = 2,
+            top = textGrob("Percentual de porão", gp = gpar(fontsize = 16, fontface = "bold")))
+```
+
+Com os gráficos acima, é possível concluir que a maior parte dos imóveis do dataset tratam-se de casas, por possuírem mais de 30% da área habitável em porão. Interessante observar que a medida que o preço por ft quadrado aumenta (do grupo A ao B), a taxa de imóveis com percentuais elevados de porão aumenta. De modo complementar, a medida que esse preço se eleva, os imóveis tendem a ter porões menores.
+
+[Conclusões da análise exploratória]{style="color: #436F9B;font-size:18px;font-weight:bold;"}
+
+- A amostra é constituída em grande parte por casas (> 30% de porão) com área superior a 100 m²;
+- A variação entre as faixas de idade definidas não impactou substancialmente o preço médio, especialmente no intervalo acima de 20 anos;
+- O grupo A se desataca por ter imóveis, em geral, mais novos, menores, mais reformados e em boa condição;
+- Quanto mais antigos os imóveis, menores tendem a ser suas notas, o número de andares e de banheiros.

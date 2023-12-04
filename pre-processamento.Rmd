@@ -1,21 +1,37 @@
 ---
-title: "Pré-Processamento"
-author: "Murilo, Caio e Isabella"
-date: "2023-11-24"
-output: html_document
+output:
+  html_document:
+    code_folding: hide
 ---
 
-# Pré-Processamento
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE, warning = FALSE, message = FALSE)
+knitr::opts_knit$set(copy.extra = TRUE)
+knitr::opts_chunk$set(fig.show = "asis")
+paleta <- c("#4979A9","#D78463","#6190C3","#DF9C81","#98B7D4","#E8B6A2","#C1D6E5")
+```
 
-O objetivo deste documento em formato Rmarkdown é conduzir o pré-processamento da base de dados contida no arquivo kc_house_data.csv. Ao concluir este processo, uma nova versão da base de dados, agora "limpa", será armazenada em formato CSV. Essa versão tratada será posteriormente utilizada na fase de análise exploratória dos dados.
+```{css, echo=FALSE}
+body {
+  background-color: #F5F5F5; 
+}
+```
+<br>
 
-Faz parte desta etapa:
+[Pré-Processamento]{style="color: #436F9B;font-size:36px;"}
+
+O objetivo deste documento em formato Rmarkdown é conduzir o pré-processamento da base de dados contida no arquivo kc_house_data.csv. Ao concluir este processo, uma nova versão da base de dados, agora "limpa", será armazenada em formato CSV. Essa versão tratada será posteriormente utilizada na fase de análise exploratória dos dados e modelagem.
+
+**Faz parte desta etapa:**
 
 - Conversão de formato
 - Tratamento de Dados Ausentes
-- Tratamento de Outliers 
+- Tratamento de dados duplicados
+- Criação de novas variaveis
+- Aprendizado Não Supervisionado de Clusterização
+- Tratamento de Outliers
 
-## Bibliotecas
+### Bibliotecas
 
 Aqui estão todas as bibliotecas utilizadas neste código.
 
@@ -26,47 +42,49 @@ library(leaflet)
 library(corrplot)
 library(viridisLite)
 library(cluster)
+library(knitr)
 ```
 
+### Base de dados
 
-
-## Base de dados
-
-Imortando a base de dados para o ambiente do R.
+Importando a base de dados para o ambiente do R:
 
 ```{r Importando arquivo csv}
 # Lendo o arquivo csv
 df <- read.csv("data/kc_house_data.csv")
 
-# Criando uma cópia do dataframe para comparação pós tratamentos
-df_copy <- df
-
 # Visualizando as primeiras linhas
-head(df, 10)
+rmarkdown::paged_table(head(df))
 ```
+
+<br>
+Número de linhas:
 ```{r Número de linhas}
 nrow(df)
 ```
 
 
-## Valores Nulos
+### Valores Nulos
 
-O Primeiro tratamento a ser realizado é verificar a quantidade de valores nulos por coluna.
+O primeiro tratamento a ser realizado é verificar a quantidade de valores nulos por coluna.
 
 ```{r Tabela de Valores nulos}
-colSums(is.na(df))
+nulos <- as.data.frame(colSums(is.na(df)))
+rmarkdown::paged_table(nulos)
+
 ```
 Não existe nenhuma coluna com valores nulos.
 
-## Ajustando formato
+### Ajustando formato
 
 Nesta parte iremos ajustar o formato das colunas.
 
 ```{r Verificando formato}
 str(df)
 ```
-A unica coluna que necessita de tratamento é a coluna date, que será transformada para formato de data.
+A única coluna que necessita de tratamento é a coluna date, que será transformada para formato de data.
 
+Nova classe da coluna date:
 ```{r Formato datetime}
 # Transformando coluna date em datetime
 df$date <- as.Date(df$date, format="%Y%m%dT%H%M%S")
@@ -75,7 +93,7 @@ df$date <- as.Date(df$date, format="%Y%m%dT%H%M%S")
 class(df$date)
 ```
 
-## Linhas Duplicadas
+### Linhas Duplicadas
 
 Verificando se existem linhas duplicadas no dataframe. 
 
@@ -100,10 +118,12 @@ id_duplicados <- unique(df$id[duplicated(df$id)])
 # Criando dataframe com as linhas de IDs duplicados
 df_id_duplicados <- df[df$id %in% id_duplicados, ]
 
-head(df_id_duplicados, 15)
+rmarkdown::paged_table(head(df_id_duplicados))
 ```
 
 Ao analisarmos o resultado das observações com id duplicadas, percebemos que alguns imóveis estão duplicados devido a atualizações nos preços ao longo do tempo. Nestes casos, os imóveis provavelmente foram negociados mais de uma vez durante o período de um ano abrangido pelas informações da base. Como propósito final deste trabalho é realizar a predição dos valores dos imóveis, decidimos manter apenas o preço mais recente, descartando informações de preços antigos associados aos mesmos imóveis.
+
+Verificando a existência de duplicidades após tratamento nas observações desatualizadas:
 
 ```{r Removendo observações desatualizadas}
 # Removendo observações duplicadas desatualizadas
@@ -116,7 +136,7 @@ df <- df %>%
 any(duplicated(df$id))
 ```
 
-## Colunas de Datas
+### Colunas de Datas
 
 A primeira coluna de data que será modificada é a yr_build, que representa o ano em que a casa foi construída. Para realizar essa alteração, faremos a operação na coluna date, subtraindo a coluna yr_build. Isso nos proporcionará a idade do imóvel. Essa modificação oferece uma abordagem mais intuitiva e interpretável ao comparar com o ano de construção.
 
@@ -135,7 +155,7 @@ df$date_year <- NULL
 df$yr_built <- NULL
 
 # Visualizando o resultado 
-head(df, 10)
+rmarkdown::paged_table(head(df))
 ```
 
 Observando a quantidade de linhas não zeradas da coluna yr_renovated
@@ -154,7 +174,7 @@ df$renovated <- ifelse(df$yr_renovated == 0, 0, 1)
 df$yr_renovated <- NULL
 
 # Visualizando os resultados
-head(df, 10)
+rmarkdown::paged_table(head(df))
 ```
 Com essas transformações podemos retirar a coluna de data do dataframe. 
 
@@ -162,20 +182,19 @@ Com essas transformações podemos retirar a coluna de data do dataframe.
 df$date <- NULL
 ```
 
-
 E com isso temos as seguintes colunas representando informações temporais dentro da base de dados:
 
 - age: Idade do imóvel;
 - renovated: (1) se o imóvel foi renovado em algum momento e (0) se não foi. 
 
-## Variaveis do tamanho do apartamento
+### Variaveis do tamanho do apartamento
 
 Dentre as variaveis preditoras temos 5 que representam o tamanho do apartamento, são elas:
 
-- sqft_living: Área habitável(Construida) da casa em pés quadrados;
-- sqft_lot: Área total do terreno em pés quadrados;
-- sqft_above: Área da casa excluindo o porão em pés quadrados;
-- sqft_basement: Área de porão em pés quadrados.
+- sqft_living: Metragem quadrada da área habitável da casa;
+- sqft_lot: Metragem quadrada do terreno em pés;
+- sqft_above:Metragem quadrada da casa excluindo o porão em pés;
+- sqft_basement: Metragem quadrada do porão em pés.
 - sqft_living15: Área hábitavel em 2015 (implica algumas reformas). Isso pode ou não ter afetado a metragem do terreno;
 - sqft_lot15: Área do terreno em 2015 (implica algumas reformas). Isso pode ou não ter afetado a metragem do terreno;
 
@@ -186,10 +205,11 @@ Primeiramente iremos analisar o quanto essas variaveis se relacionam através de
 sqft_corr_matrix <- cor(df[, c("sqft_living", "sqft_lot", "sqft_above", "sqft_basement", "sqft_living15", "sqft_lot15")])
 
 # Plot the correlation matrix
-corrplot(sqft_corr_matrix, method = "color")
+corrplot(sqft_corr_matrix, method = "color",tl.col = "black")
 ```
 ```{r Visualizando valores}
-sqft_corr_matrix
+matrix <- as.data.frame(sqft_corr_matrix)
+rmarkdown::paged_table(head(matrix))
 ```
 
 A primeira observação refere-se às variáveis sqft_living15 e sqft_lot15, que apresentam uma alta correlação com as variáveis sqft_living e sqft_lot, respectivamente. Isso é compreensível, uma vez que essas colunas representam possíveis alterações nas dimensões consideradas para a área habitável e o tamanho do lote. No entanto, vale destacar que essas alterações não ocorrem em todas as residências do conjunto de dados e não contribuem significativamente com informações novas que possam aprimorar a precisão das previsões ou a interpretabilidade do modelo, dessa forma, optaremos por excluí-las da análise
@@ -229,63 +249,64 @@ df$sqft_above <- NULL
 df$sqft_basement <- NULL
 
 # Visualizando o resultado
-head(df, 10)
+rmarkdown::paged_table(head(df))
 ```
 Observando a distribuição desta nova variavel criada.
 
 ```{r Histograma basement_percent}
 ggplot(df, aes(x = basement_percent*100)) +
-  geom_histogram(binwidth = 5, fill = "blue", color = "black", alpha = 0.7) +
+  geom_histogram(binwidth = 5, fill = "#4979A9", color = "white", alpha = 0.7) +
   labs(title = "Distribuição do Percentual de porão",
        x = "Percentual de porão em relação a área habitavel",
        y = "Frequência") +
   theme_minimal()
 
 ```
+<br><br>
 Como podemos observar, temos muitas casas que não possuem porão.
 
 ```{r Histograma basement_percent sem valores zerados}
 ggplot(df[df$basement_percent > 0, ], aes(x = basement_percent * 100)) +
-  geom_histogram(binwidth = 5, fill = "blue", color = "black", alpha = 0.7) +
+  geom_histogram(binwidth = 5, fill = "#4979A9", color = "white", alpha = 0.7) +
   labs(title = "Distribuição do Percentual de porão",
        x = "Percentual de porão em relação a área habitável",
        y = "Frequência") +
   theme_minimal()
 ```
-
+<br><br>
 Considerando que a principal métrica no mercado imobiliário para determinar o tamanho dos imóveis é a área construída, escolheremos abordar a coluna sqft_lot, que indica o tamanho total do lote, de maneira proporcional através da razão entre ela e a coluna sqft_living. Dessa forma, obteremos uma medida proporcional do tamanho da área construída em relação ao tamanho total do lote.
 
 ```{r Cálculando nova métrica}
 # Criando nova métrica
-df$lot_percent <- df$sqft_living / df$sqft_lot
+df$living_percent <- df$sqft_living / df$sqft_lot
 
 # Retirando coluna do dataframe
 df$sqft_lot <- NULL
 
 # Visualizando dataframe
-head(df, 10)
+rmarkdown::paged_table(head(df))
 ```
 Visualizando a distribuição desta nova variavel:
 
 ```{r Histograma lot_percent}
-ggplot(df, aes(x = lot_percent*100)) +
-  geom_histogram(binwidth = 5, fill = "blue", color = "black", alpha = 0.7) +
+ggplot(df, aes(x = living_percent*100)) +
+  geom_histogram(binwidth = 5, fill = "#4979A9", color = "white", alpha = 0.7) +
   labs(title = "Distribuição do tamanho do lote em relação a área habitavel",
        x = "Indice de proporção do tamanho do lote em relação a área habitavel",
        y = "Frequência") +
   theme_minimal()
 ```
+<br><br>
 Ao analisar o histograma dessa nova variável, é possível observar que alguns imóveis apresentam valores superiores a 100%, indicando uma área construída maior do que a área total do lote. Essa situação pode parecer inicialmente contraditória. No entanto, esse fenômeno ocorre em situações em que o imóvel possui mais de um andar, o que faz com que a área construída possa ultrapassar o tamanho do lote.
 
 Com isso chegamos nas seguintes váriavel preditoras que representam o tamanho do imóvel: 
 
-- sqft_living: Metragem quadrada da área habitável da casa;
+- sqft_living: Tamanho de área hábitavel(construida) em pés;
 - basement_percent: Porcentagem de área construida que representa o porão;
-- lot_percent: Porcentagem de área de construida em relação ao tamanho total do terreno.
+- living_percent: Porcentagem de área de construida em relação ao tamanho total do terreno.
 
 
-
-## Preditoras de Localização
+### Preditoras de Localização
 
 Neste dataframe, encontramos três colunas que denotam a localização do apartamento na cidade: zipcode, latitude e longitude. Com o intuito de privilegiar a interpretabilidade do modelo, buscaremos consolidar essas informações de localização em uma única variável. Essa nova variável representará a classe de localização na qual o imóvel se enquadra. Dado que temos informações sobre apartamentos de diversos intervalos de preço e tamanhos, optaremos por utilizar a métrica de preço por feet quadrado para agrupar essas unidades com base na localização. Essa abordagem proporcionará uma representação mais simplificada e compreensível da informação de localização, contribuindo para a eficácia e interpretabilidade do modelo.
 
@@ -295,27 +316,31 @@ df$price_sqft <- df$price / df$sqft_living
 
 # Observando a normalização com relação ao preço
 grafico1 <- ggplot(df, aes(x = sqft_living, y = price)) +
-  geom_point() +
-  labs(title = "Tamamho do impóvel x preço",
-       x = "Tamanho do impovel",
+  geom_point(color = "#4979A9", alpha = 0.3) +
+  labs(title = "Tamamho do imóvel x preço",
+       x = "Tamanho do imóvel",
        y = "Preço") +
   theme_minimal()
 
 grafico2<- ggplot(df, aes(x = sqft_living, y = price_sqft)) +
-  geom_point() +
-  labs(title = "Tamamho do impóvel x preço por feet quadrado",
-       x = "Tamanho do impovel",
+  geom_point(color = "#4979A9", alpha = 0.3) +
+  labs(title = "Tamamho do imóvel x preço por feet quadrado",
+       x = "Tamanho do imovel",
        y = "Preço por feet quadrado") +
   theme_minimal()
 
 # Plotando
 grid.arrange(grafico1, grafico2, ncol = 2)
 ```
+<br><br>
 Como pode ser observado, ao utilizar esta nova métrica, não temos mais uma relação linear com o tamanho.
 
 ```{r}
+# Paleta
+paleta2 <- c("#FFFFCC", "#FED976", "#FEB24C", "#FD8D3C", "#FC4E2A", "#E31A1C", "#BD0026")
+
 # Ajuste a escala de cores conforme necessário
-cor_escala <- colorNumeric(palette = "viridis", domain = df$price_sqft)
+cor_escala <- colorNumeric(palette = paleta2 , domain = df$price_sqft)
 
 # Determine o ponto central do mapa (usando a mediana das coordenadas)
 centro_latitude <- median(df$lat)
@@ -329,9 +354,9 @@ map_leaflet <- leaflet(df) %>%
 # Adicione marcadores para representar cada ponto de dados
 map_leaflet <- map_leaflet %>%
   addCircleMarkers(lng = ~long, lat = ~lat,
-                   radius = 3,  # Ajuste o tamanho dos marcadores conforme necessário
+                   radius = 2,  # Ajuste o tamanho dos marcadores conforme necessário
                    color = ~cor_escala(price_sqft),
-                   fillOpacity = 0.8,
+                   fillOpacity = 0.2,
                    popup = ~paste("Preço por m²: $", price_sqft))
 
 # Exiba o mapa
@@ -367,7 +392,7 @@ df_zipcode <- df %>%
   summarise(across(all_of(col_mean), mean))
 
 # Exibindo 
-head(df_zipcode, 15)
+rmarkdown::paged_table(head(df_zipcode))
 ```
 
 Com as informações agrupadas por zipcodes, podemos encontrar o número ótimo de clusters de imóveis com caracteristicas parecidas.
@@ -401,7 +426,7 @@ kmeans_result <- kmeans(df_zipcode[,-1], centers = numero_clusters)
 df_zipcode$grupo <- as.factor(kmeans_result$cluster)
 
 # Visualizando
-df_zipcode
+rmarkdown::paged_table(head(df_zipcode))
 ```
 
 Agora que temos os zipcodes separados em 4 grupos de acordo com as caracteristicas médias de cada região, podemos adicionar esta nova preditora para o dataframe original.
@@ -411,7 +436,7 @@ Agora que temos os zipcodes separados em 4 grupos de acordo com as caracteristic
 df <- merge(df, df_zipcode[, c("zipcode", "grupo")], by = "zipcode", all.x = TRUE)
 
 # Visualizando o resultado
-head(df, 10)
+rmarkdown::paged_table(head(df))
 ```
 Obtendo ordem de sqft_price de cada grupo encontrado.
 
@@ -422,7 +447,7 @@ group_sqft_price_mean <- df %>%
   summarise(mean_price_sqft = mean(price_sqft))
 
 # Visualizando
-group_sqft_price_mean
+rmarkdown::paged_table(head(group_sqft_price_mean))
 ```
 
 Com isso temos as seguintes categorias de localização:
@@ -442,9 +467,9 @@ Visualizando no mapa essa nova classificação.
 
 ```{r}
 # criando coluna de cor
-df$cor <- ifelse(df$grupo == "A", "yellow",
-                 ifelse(df$grupo == "B", "green",
-                        ifelse(df$grupo == "C", "blue", "purple")))
+df$cor <- ifelse(df$grupo == "A", "#E41A1C",
+                 ifelse(df$grupo == "B", "#377EB8",
+                        ifelse(df$grupo == "C", "#4DAF4A", "#984EA3")))
 
 # Criar o mapa
 mapa <- leaflet(df) %>%
@@ -469,11 +494,59 @@ df$lat <- NULL
 df$long <- NULL
 df$zipcode <- NULL
 df$cor <- NULL
-df$price_sqft <- NULL
 ```
 
 
-## Ajustes finais
+### Tratamento de Outliers
+
+Os tratamentos de valores outliers serão realizados nas colunas bedrooms e price.
+
+Primeiramente, iremos verificar a preditora bedrooms:
+
+```{r}
+boxplot_func <- function(y_variable) {
+  ggplot(df, aes(x = "", y = {{y_variable}})) +
+    geom_boxplot(fill = "red", alpha = 0.5) +
+    labs(title = paste("Boxplot -", deparse(substitute(y_variable))),
+         x = "",
+         y = "Valor") +
+    theme_minimal()
+}
+
+# Visualizando 
+boxplot_func(bedrooms)
+```
+Ánalisando o boxplot gerado, temos um imóvel com mais de 30 quartos dentro da base de dados. Esta observação será retirada da analise para não influenciar na modelagem.
+
+```{r}
+# Retirando observação com mais de 30 quartos
+df <- df[df$bedrooms < 30, ]
+```
+
+Observando os valores outliers de preço.
+```{r}
+boxplot_func(price)
+```
+De acordo com o boxplot gerado acima, iremos definir um corte para trabalhar apenas com apartamentos menores que 4 milhões.
+```{r}
+# Definindo corte
+df <- df[df$price < 4000000, ]
+```
+
+### Tratamento da Preditora Quartos
+
+Conforme analise exploratória, a relação entre o preço e o número de quartos não segue um padrão de linearidade, por conta disso, iremos criar uma categoria para esta coluna.
+
+```{r}
+# Transformando em categoria
+df$categoria_quartos <- ifelse(df$bedrooms > 5, ">5", as.character(df$bedrooms))
+
+# Retriando bedrooms
+df$bedrooms <- NULL
+```
+
+
+### Ajustes finais
 
 As ultimas alteração que será feita é retirar a coluna de id que não representa nenhuma informação relevante para a predição dos preços das casas e a coluna view que apenas representa quantas visistas a casa já recebeu, chegando assim no seguinte dataframe final:
 
@@ -481,14 +554,15 @@ As ultimas alteração que será feita é retirar a coluna de id que não repres
 # Removendo coluna de id
 df$id <- NULL
 df$view <- NULL
+df$price_sqft <- NULL
 
 # Visualizando as 10 primeiras linhas
-head(df, 10)
+rmarkdown::paged_table(head(df))
 ```
-O dicionario de dados para o dataframe processado:
+O dicionário de dados para o dataframe processado:
 
 - price: Preço de venda;
-- bedrooms: número de quartos;
+- categoria_quartos: número de quartos em categoria;
 - sqft_living: Tamanho de área hábitavel(construida);
 - floors: número de andares;
 - waterfront: Casas beira-mar;
@@ -497,7 +571,7 @@ O dicionario de dados para o dataframe processado:
 - age: idade do imóvel;
 - renovated: (1) se o imóvel foi renovado em algum momento e (0) se não foi. 
 - basement_percent: Porcentagem de área construida que representa o porão;
-- lot_percent: Porcentagem de área de construida em relação ao tamanho total do terreno.
+- living_percent: Porcentagem de área de construida em relação ao tamanho total do terreno.
 
 
 Salvando arquivo final para a ánalise exploratoria:
